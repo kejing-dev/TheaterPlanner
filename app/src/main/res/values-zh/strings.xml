@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">影院规划</string>
+    <string name="lang_code">zh</string>
+
+    <string name="page_speakers">音箱</string>
+    <string name="page_screen">屏幕</string>
+    <string name="action_reseat">换座位</string>
+    <string name="action_more">更多</string>
+    <string name="count_51">5 只</string>
+    <string name="count_512">7 只（2 只在天花板）</string>
+    <string name="count_714">11 只（4 只在天花板）</string>
+    <string name="status_all_in">%1$d 只都在推荐范围</string>
+    <string name="status_some_out">%1$d 只超出范围</string>
+    <string name="status_too_close">%1$d 只离你太近</string>
+    <string name="status_no_rear">后面没空间 · 建议 5.1</string>
+    <string name="status_assumed">顶置按 2.6 m 层高估算</string>
+    <string name="status_view_ok">视角 %1$d° · 合适</string>
+    <string name="status_view_small">视角 %1$d° · 偏小</string>
+    <string name="status_view_large">视角 %1$d° · 偏大</string>
+    <string name="status_too_far">后墙不够 · 差 %1$s</string>
+    <string name="absorbers">吸音板</string>
+    <string name="rough">大概位置</string>
+    <string name="reset_all">全部摆回推荐</string>
+    <string name="sub_hint">低音炮放前方地上任意处</string>
+    <string name="hint_stick">摇杆左右转动</string>
+    <string name="mode_tv">电视</string>
+    <string name="mode_projector">投影</string>
+    <string name="inches">%1$d 寸</string>
+    <string name="width">宽 %1$s</string>
+    <string name="max_size">已是最大</string>
+    <string name="recommend">推荐 %1$d–%2$d 寸</string>
+    <string name="tv_capped">电视最大 115 寸 · 可换投影</string>
+    <string name="use_recommended">用推荐</string>
+    <string name="ratio">投射比</string>
+    <string name="throw_distance">离幕 %1$s</string>
+    <string name="ratio_hint">投射比在说明书上，如 1.2:1 · 未计镜头位移</string>
+    <string name="no_rear_wall">没找到后墙</string>
+    <string name="overhead">在你头顶</string>
+    <string name="action_minus">减小</string>
+    <string name="action_plus">增大</string>
+
+    <string name="range">%1$d° · 推荐 %2$d–%3$d°</string>
+    <string name="move">往%1$s %2$s</string>
+    <string name="dir_left">左</string>
+    <string name="dir_right">右</string>
+    <string name="dir_forward">前</string>
+    <string name="dir_back">后</string>
+    <string name="dir_center">中间</string>
+    <string name="dir_outward">两边</string>
+    <string name="too_close_one">离你太近</string>
+    <string name="no_wall">没碰到墙</string>
+    <string name="assumed_one">顶置按 2.6 m 估</string>
+    <string name="action_reset">摆回推荐</string>
+
+    <string name="seat_title">坐到看电影的位置</string>
+    <string name="seat_body">看着放电视的那面墙，捏一下</string>
+    <string name="reseat_title">坐到新位置，捏一下</string>
+    <string name="seat_here">就坐这儿</string>
+    <string name="action_cancel">取消</string>
+
+    <string name="lang_system">跟随系统</string>
+    <string name="lang_en">英文</string>
+    <string name="menu_clear">全部清除</string>
+    <string name="menu_exit">退出</string>
+    <string name="dialog_clear">清除座位和全部摆放？</string>
+    <string name="action_clear">清除</string>
+    <string name="dialog_unavailable">这台设备上找不到房间</string>
+    <string name="action_exit">退出</string>
+    <string name="action_retry">重试</string>
+
+    <string name="snack_scanning">慢慢看一圈：地面、墙、天花板</string>
+    <string name="snack_standing">好像站着 · 坐下更准</string>
+    <string name="snack_too_low">太低了 · 坐直再捏</string>
+    <string name="snack_redo">重捏</string>
+    <string name="snack_restored">已找回上次的布局</string>
+    <string name="snack_elsewhere">上次的布局不在这里</string>
+    <string name="snack_sit_again">重新坐下</string>
+    <string name="snack_lost">定位丢失 · 环顾四周</string>
+    <string name="snack_cleared">已清除</string>
+    <string name="snack_unsaved">没能保存</string>
+
+    <string name="coach">按住音箱，沿墙拖</string>
+    <string name="rear_coach">可以站起来转身拖，角度仍按座位算</string>
+    <string name="coach_ok">知道了</string>
+    <string name="starting">准备中</string>
+</resources>

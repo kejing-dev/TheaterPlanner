@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Theater Planner</string>
+    <string name="lang_code">en</string>
+
+    <!-- console -->
+    <string name="page_speakers">Speakers</string>
+    <string name="page_screen">Screen</string>
+    <string name="action_reseat">Change seat</string>
+    <string name="action_more">More</string>
+    <string name="cfg_51" translatable="false">5.1</string>
+    <string name="cfg_512" translatable="false">5.1.2</string>
+    <string name="cfg_714" translatable="false">7.1.4</string>
+    <string name="count_51">5 speakers</string>
+    <string name="count_512">7 (2 on ceiling)</string>
+    <string name="count_714">11 (4 on ceiling)</string>
+    <string name="status_all_in">All %1$d in range</string>
+    <string name="status_some_out">%1$d out of range</string>
+    <string name="status_too_close">%1$d too close</string>
+    <string name="status_no_rear">No room behind · try 5.1</string>
+    <string name="status_assumed">Ceiling assumed 2.6 m</string>
+    <string name="status_view_ok">View %1$d° · good</string>
+    <string name="status_view_small">View %1$d° · small</string>
+    <string name="status_view_large">View %1$d° · large</string>
+    <string name="status_too_far">Wall too close · %1$s short</string>
+    <string name="absorbers">Absorbers</string>
+    <string name="rough">Approximate</string>
+    <string name="reset_all">Reset all</string>
+    <string name="sub_hint">Subwoofer: anywhere on the front floor</string>
+    <string name="hint_stick">Stick left / right to turn</string>
+    <string name="mode_tv">TV</string>
+    <string name="mode_projector">Projector</string>
+    <string name="inches">%1$d\"</string>
+    <string name="width">%1$s wide</string>
+    <string name="max_size">Max size</string>
+    <string name="recommend">Best %1$d–%2$d\"</string>
+    <string name="tv_capped">TV max 115\" · try a projector</string>
+    <string name="use_recommended">Use best</string>
+    <string name="ratio">Throw ratio</string>
+    <string name="throw_distance">%1$s from screen</string>
+    <string name="ratio_hint">Throw ratio is in the manual, e.g. 1.2:1 · no lens shift</string>
+    <string name="no_rear_wall">No back wall found</string>
+    <string name="overhead">Above your head</string>
+    <string name="action_minus">Smaller</string>
+    <string name="action_plus">Larger</string>
+
+    <!-- speaker strip / readout -->
+    <string name="range">%1$d° · best %2$d–%3$d°</string>
+    <string name="move">Move %1$s %2$s</string>
+    <string name="dir_left">left</string>
+    <string name="dir_right">right</string>
+    <string name="dir_forward">forward</string>
+    <string name="dir_back">back</string>
+    <string name="dir_center">toward center</string>
+    <string name="dir_outward">outward</string>
+    <string name="too_close_one">Too close</string>
+    <string name="no_wall">No wall hit</string>
+    <string name="assumed_one">Ceiling assumed 2.6 m</string>
+    <string name="action_reset">Reset</string>
+
+    <!-- seat prompt -->
+    <string name="seat_title">Sit where you watch</string>
+    <string name="seat_body">Look at the TV wall and pinch</string>
+    <string name="reseat_title">Move to the new seat and pinch</string>
+    <string name="seat_here">Sit here</string>
+    <string name="action_cancel">Cancel</string>
+
+    <!-- menu / dialogs -->
+    <string name="lang_system">Follow system</string>
+    <string name="lang_zh" translatable="false">中文</string>
+    <string name="lang_en">English</string>
+    <string name="lang_en_short" translatable="false">EN</string>
+    <string name="unit_m" translatable="false">m</string>
+    <string name="unit_ft" translatable="false">ft</string>
+    <string name="menu_clear">Clear all</string>
+    <string name="menu_exit">Exit</string>
+    <string name="dialog_clear">Clear seat and layout?</string>
+    <string name="action_clear">Clear</string>
+    <string name="dialog_unavailable">Can\'t find the room on this device</string>
+    <string name="action_exit">Exit</string>
+    <string name="action_retry">Retry</string>
+
+    <!-- snackbars -->
+    <string name="snack_scanning">Look around: floor, walls, ceiling</string>
+    <string name="snack_standing">Standing? Sit for accuracy</string>
+    <string name="snack_too_low">Too low · sit up</string>
+    <string name="snack_redo">Redo</string>
+    <string name="snack_restored">Layout restored</string>
+    <string name="snack_elsewhere">Last layout isn\'t here</string>
+    <string name="snack_sit_again">Sit again</string>
+    <string name="snack_lost">Tracking lost · look around</string>
+    <string name="snack_cleared">Cleared</string>
+    <string name="snack_unsaved">Not saved</string>
+
+    <!-- coachmarks -->
+    <string name="coach">Hold a speaker, slide it</string>
+    <string name="rear_coach">Stand up to drag; angles stay seat-based</string>
+    <string name="coach_ok">Got it</string>
+    <string name="starting">Getting ready</string>
+</resources>
