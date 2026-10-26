@@ -6,7 +6,9 @@
 
 **Sit on your sofa and pinch: where each 5.1 / 5.1.2 / 7.1.4 speaker goes, how big the TV should be, where the projector hangs and where the absorbers stick — drawn straight onto your real walls and ceiling.**
 
-PICO OS 6 · PICO Spatial SDK 6.1 · Kotlin / SpatialUI · package `io.embodit.theaterplanner` · v0.1.1 (pre-release / 预发布) · 模拟器 QA 通过 / emulator QA passed
+PICO OS 6 · PICO Spatial SDK 6.1 · Kotlin / SpatialUI · package `io.embodit.theaterplanner` · v0.1.1 (pre-release / 预发布)
+
+> **模拟器 QA 通过，真机未验证（Simulator-QA passed; not yet verified on a real headset）**
 
 ![封面：5.1 布局，5 只音箱与墙上的绿色推荐带](docs/cover-S04-layout51.jpg)
 
