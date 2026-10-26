@@ -1,6 +1,6 @@
 # Theater Planner (影院规划)
 
-MR home-theater planning app for PICO OS 6. Kotlin, PICO Spatial SDK 6.1.9 (template 6.1), one Mixed Stage
+MR home-theater planning app for PICO OS 6 (v0.1.1). Kotlin, PICO Spatial SDK 6.1.9 (template 6.1), one Mixed Stage
 (Full Space only, no Shared Space version), package `io.embodit.theaterplanner`. Sit on your sofa, look at the
 TV wall and pinch: the 5.1 / 5.1.2 / 7.1.4 speakers land on your real walls and ceiling at the Dolby angles,
 with a green recommended band on each wall and a green zone on the ceiling; drag a speaker along the wall
@@ -61,9 +61,12 @@ state it writes is `panelShown` and the `readout` pill (at most 10 Hz).
 - Drag: system drag -> pointing line (DragLine) -> hit on any plane -> azimuth -> re-land on the wall (height
   kept); overhead: hit on the ceiling. Nothing hit keeps the last frame. Release writes the position.
 - Thumbstick (taste profile D): stick X turns the selected / dragged speaker about the seat's vertical axis
-  (dead zone 0.15, up to 60 deg/s), i.e. along the wall; within 3 degrees (15 cm overhead) of the recommended
-  spot it snaps there (`SNAP` log); the dashed amber frame at the recommended spot is the snap target; the strip's
-  third line says 「摇杆左右转动」when nothing more urgent claims it.
+  (dead zone 0.15, up to 60 deg/s), i.e. along the wall. Nothing snaps while the stick is pushed (QA round 1,
+  q1-1: a speaker at its recommended spot could never leave it); when the stick is let go (150 ms in the dead
+  zone) the position is judged once: within 3 degrees (15 cm overhead) of the recommended spot it snaps there
+  (`STICK snapped` / `SNAP` log). A system drag snaps live, since its targets are absolute. The dashed amber frame
+  at the recommended spot is the snap target; the strip's third line says 「摇杆左右转动」when nothing more urgent
+  claims it.
 - Screen: 16:9, width = D x 0.0254 x 16 / sqrt(337); centre at ear + 0.05 m, lower edge >= 0.5 m, upper edge <=
   ceiling - 0.05; view angle 2 atan(w / 2d), 30 - 40 degrees good, "use best" = 36 degrees; limits by the wall's
   width (2 x nearer side - 0.2) and the room height; TV 32 - 115", projector 60 - 200".

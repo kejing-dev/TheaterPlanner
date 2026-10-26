@@ -6,7 +6,7 @@
 
 **Sit on your sofa and pinch: where each 5.1 / 5.1.2 / 7.1.4 speaker goes, how big the TV should be, where the projector hangs and where the absorbers stick — drawn straight onto your real walls and ceiling.**
 
-PICO OS 6 · PICO Spatial SDK 6.1 · Kotlin / SpatialUI · package `io.embodit.theaterplanner` · v0.1.0 (pre-release / 预发布)
+PICO OS 6 · PICO Spatial SDK 6.1 · Kotlin / SpatialUI · package `io.embodit.theaterplanner` · v0.1.1 (pre-release / 预发布) · 模拟器 QA 通过 / emulator QA passed
 
 ![封面：5.1 布局，5 只音箱与墙上的绿色推荐带](docs/cover-S04-layout51.jpg)
 
@@ -24,7 +24,7 @@ PICO OS 6 · PICO Spatial SDK 6.1 · Kotlin / SpatialUI · package `io.embodit.t
 ### 安装与启动
 
 ```bash
-adb install -r TheaterPlanner-v0.1.0.apk
+adb install -r TheaterPlanner-v0.1.1.apk
 pico-cli app launch io.embodit.theaterplanner
 ```
 
@@ -47,16 +47,30 @@ APK 在 [Releases](https://github.com/kejing-dev/TheaterPlanner/releases) 页面
 | ![屏幕·电视：前墙上 1:1 的电视与视角判断](docs/S12-screen-tv.jpg) | ![屏幕·投影：幕布、吊装投影机与光锥](docs/S13-screen-projector.jpg) |
 | 屏幕·电视 — 1:1 电视矩形与「视角 36° · 合适」 | 屏幕·投影 — 幕布、吊装投影机与投射比 |
 
+### v0.1.1 摇杆复验（QA 第 2 轮）
+
+v0.1.0 里，音箱停在推荐位时推摇杆纹丝不动（每帧刚转一点就被吸回推荐位）。v0.1.1 改成：推摇杆期间不吸附，松手后才判断一次，离推荐位 3° 以内才吸回。
+
+| | |
+|---|---|
+| ![从推荐位推开：左前音箱移出画面，原位留下琥珀色虚线框](docs/S07-stick-away.jpg) | ![推回推荐位附近松手：吸回原位，5 只都在推荐范围](docs/S07-stick-return.jpg) |
+| 从推荐位推开 — 左前音箱 −26.6° → −44.7°，原位留下虚线框 | 推回 3° 以内松手 — 吸回 −26.6°，「5 只都在推荐范围」 |
+
 启动器图标：
 
 <img src="docs/launcher.jpg" width="480" alt="PICO 启动器中的应用图标">
 
-### 已知问题（QA 第 1 轮进行中）
+### 版本
 
-- 中文字体子集缺「绕」「侧」两字，这两个字会回退到系统字体，字形与其余文字略有差异。
+- **v0.1.1**：修好摇杆从推荐位推不动的问题（QA 第 1 轮打回的唯一一条）；推动期间不吸附、松手再判一次，并去掉了每帧 0.1° 的漂移。QA 第 2 轮在模拟器上复查通过。
+- v0.1.0：首个版本。
+
+### 已知问题
+
+- 中文字体子集缺「绕」「侧」两字（音箱名「左环绕」「左侧环绕」等），这两个字会回退到系统字体，字形与其余文字略有差异。
 - HOME 键在模拟器上先弹出系统「Back to Home」确认框，再退出应用。
-- 摇杆交互（左右转动音箱并吸附到推荐位）在模拟器上没有手柄、未验证；真机未验证。
-- QA 第 1 轮仍在模拟器上进行，未完成的检查项会在后续轮次补充；真机验收未做。
+- 摇杆在模拟器上用调试广播模拟验证过；真实手柄摇杆、真实捏合、真机都还没验。
+- 中置音箱的推荐范围显示成「推荐 5–5°」；7.1.4 在后墙很近（1.2 m）的房间里，后顶两只始终是红色（房间本身放不下）。
 
 ---
 
@@ -69,7 +83,7 @@ Plan a home theater from your own sofa before drilling holes or buying speakers.
 ### Install and launch
 
 ```bash
-adb install -r TheaterPlanner-v0.1.0.apk
+adb install -r TheaterPlanner-v0.1.1.apk
 pico-cli app launch io.embodit.theaterplanner
 ```
 
@@ -83,14 +97,19 @@ Download the APK from the [Releases](https://github.com/kejing-dev/TheaterPlanne
 
 ### Screenshots
 
-See the gallery above: 5.1.2 ceiling zones, dragging with the live readout, out-of-range (red) hint, absorbers, TV screen with the viewing-angle verdict, and the projector with its throw distance.
+See the gallery above: 5.1.2 ceiling zones, dragging with the live readout, out-of-range (red) hint, absorbers, TV screen with the viewing-angle verdict, and the projector with its throw distance. The v0.1.1 thumbstick re-check pair shows a speaker pushed away from its recommended spot (−26.6° → −44.7°) and snapping back on release within 3°.
 
-### Known issues (QA round 1 in progress)
+### Versions
 
-- The subset Chinese font lacks the glyphs 「绕」 and 「侧」; those two characters fall back to the system font and look slightly different.
+- **v0.1.1**: fixes the thumbstick doing nothing on a speaker at its recommended spot (the only finding QA round 1 sent back): no snapping while the stick is pushed, one snap check on release, and no more 0.1° per-frame drift. Re-checked and passed in QA round 2 on the emulator.
+- v0.1.0: first build.
+
+### Known issues
+
+- The subset Chinese font lacks the glyphs 「绕」 and 「侧」 (used in speaker names such as 左环绕 / 左侧环绕); those two characters fall back to the system font and look slightly different.
 - On the emulator the HOME key first shows the system "Back to Home" confirmation before the app exits.
-- Thumbstick interaction (turning a speaker along the wall and snapping to the recommended spot) is unverified: no controller on the emulator, and no real-device test yet.
-- QA round 1 is still running on the emulator; unfinished checks will be covered in later rounds. No real-device acceptance yet.
+- The thumbstick was verified on the emulator through simulated debug input only; a real controller, real pinch and a real headset are still unverified.
+- The centre speaker's range reads 「推荐 5–5°」; in 7.1.4 with a back wall only 1.2 m away the two rear-top speakers stay red (the room cannot fit them).
 
 ## License
 

@@ -173,6 +173,12 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
     private class Turn(val id: String) {
         var neutralSinceMs = -1L
         var frames = 0
+
+        /** The commanded azimuth (listener-level), integrated from the stick; the wall landing is derived from it, never fed back. */
+        var az: Float? = null
+
+        /** The commanded ceiling point (overhead), integrated from the stick before the ceiling clamp. */
+        var raw: P2? = null
     }
 
     private var drag: Drag? = null
@@ -678,9 +684,18 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
             t.neutralSinceMs = -1L
             t.frames++
             val current = positionOf(sp)
-            val turned = Theater.turnAboutSeat(seat, P2.of(current), rate * dt)
-            if (sp.def.kind == SpeakerKind.LISTENER) setLiveListener(sp, seat.azimuthOf(turned), now)
-            else setLiveOverhead(sp, ui.room.clampToCeiling(turned.at(current.y), Theater.CEILING_INSET_M), now)
+            // The stick integrates a commanded azimuth / point of its own. Re-deriving it from the landed position
+            // every frame drifted (the 0.12 m retreat along the wall normal shifts the azimuth a little each time).
+            // No snapping while the stick is pushed: the speaker must be able to leave its recommended spot.
+            if (sp.def.kind == SpeakerKind.LISTENER) {
+                val az = wrapDeg((t.az ?: seat.azimuthOf(P2.of(current))) + rate * dt)
+                t.az = az
+                setLiveListener(sp, az, now, allowSnap = false)
+            } else {
+                val raw = Theater.turnAboutSeat(seat, t.raw ?: P2.of(current), rate * dt)
+                t.raw = raw
+                setLiveOverhead(sp, ui.room.clampToCeiling(raw.at(current.y), Theater.CEILING_INSET_M), now, allowSnap = false)
+            }
         } else {
             val t = turn ?: return
             if (t.neutralSinceMs < 0) t.neutralSinceMs = now else if (now - t.neutralSinceMs >= STICK_RELEASE_MS) finishTurn("release")
@@ -690,12 +705,23 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
     private fun finishTurn(why: String) {
         val t = turn ?: return
         turn = null
-        val l = live
+        var l = live
         TpLog.i("STICK turn end id=${t.id} frames=${t.frames} why=$why at=${TpLog.pos(l?.second)}")
         if (drag?.id == t.id) return // still dragged: the drag writes it on release
         if (l == null || l.first != t.id) {
             clearLive()
             return
+        }
+        // let go near the recommended spot: snap there now (judged once, not while the stick was pushed)
+        val sp = ui.speakers.firstOrNull { it.id == t.id }
+        val seat = ui.seat
+        if (sp != null && seat != null) {
+            val now = SystemClock.elapsedRealtime()
+            snapped = false
+            if (sp.def.kind == SpeakerKind.LISTENER) setLiveListener(sp, t.az ?: seat.azimuthOf(P2.of(l.second)), now, allowSnap = true)
+            else setLiveOverhead(sp, l.second, now, allowSnap = true)
+            l = live ?: l
+            if (snapped) TpLog.i("STICK snapped id=${t.id} at=${TpLog.pos(l.second)}")
         }
         awaitCommit = t.id to SystemClock.elapsedRealtime()
         sink(PlannerEvent.SpeakerTurned(t.id, l.second, liveNoWall))
@@ -711,21 +737,26 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
     // live placement (shared by drag and stick)
     // =========================================================================================
 
-    /** A listener-level speaker at azimuth [az]: lands on the wall; snaps to the recommended azimuth within 3 degrees. */
-    private fun setLiveListener(sp: SpeakerState, azIn: Float, now: Long) {
+    /**
+     * A listener-level speaker at azimuth [az]: lands on the wall; with [allowSnap] it snaps to the
+     * recommended azimuth within 3 degrees. The thumbstick turns in small steps from wherever the speaker
+     * is, so while the stick is pushed nothing snaps (QA round 1, q1-1: a speaker resting at its recommended
+     * spot was pulled back every frame and could not leave); the snap is judged once when the stick is let go.
+     */
+    private fun setLiveListener(sp: SpeakerState, azIn: Float, now: Long, allowSnap: Boolean = true) {
         val seat = ui.seat ?: return
         var az = azIn
-        val snap = abs(wrapDeg(az - sp.def.azimuth)) <= Theater.SNAP_DEG
+        val snap = allowSnap && abs(wrapDeg(az - sp.def.azimuth)) <= Theater.SNAP_DEG
         if (snap) az = sp.def.azimuth
         val landing = Theater.land(ui.room, seat, az)
         val pos = landing.point.at(sp.position.y)
         setLive(sp, pos, landing.noWall, landing.plane, landing.wallNormal, snap, now)
     }
 
-    /** An overhead speaker at a ceiling point: snaps to the recommended point within 15 cm. */
-    private fun setLiveOverhead(sp: SpeakerState, pointIn: Vec3, now: Long) {
+    /** An overhead speaker at a ceiling point: with [allowSnap] it snaps to the recommended point within 15 cm. */
+    private fun setLiveOverhead(sp: SpeakerState, pointIn: Vec3, now: Long, allowSnap: Boolean = true) {
         var point = pointIn
-        val snap = point.distanceTo(sp.recommended) <= Theater.SNAP_M
+        val snap = allowSnap && point.distanceTo(sp.recommended) <= Theater.SNAP_M
         if (snap) point = sp.recommended
         setLive(sp, point, false, ui.room.ceiling, null, snap, now)
     }
