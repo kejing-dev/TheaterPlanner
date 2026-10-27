@@ -8,8 +8,10 @@ import io.embodit.theaterplanner.domain.HeadPose
 import io.embodit.theaterplanner.domain.LanguagePref
 import io.embodit.theaterplanner.domain.LengthUnit
 import io.embodit.theaterplanner.domain.Quat4
+import io.embodit.theaterplanner.domain.RoomSource
 import io.embodit.theaterplanner.domain.ScreenMode
 import io.embodit.theaterplanner.domain.Vec3
+import io.embodit.theaterplanner.domain.VirtualRoom
 import io.embodit.theaterplanner.platform.TpGraph
 import io.embodit.theaterplanner.platform.TpLog
 import io.embodit.theaterplanner.ui.planner.Page
@@ -38,6 +40,9 @@ import java.util.Locale
  * `absorbers` s=on|off · `reseat` · `reset` [s=id] · `stick` a=x,ms · `ui` s=control · `lang` s=system|zh|en ·
  * `unit` s=m|ft · `coach_reset` · `restore_timeout` · `restore` · `no_ceiling` s=on|off · `lost` s=on|off ·
  * `unavailable` s=on|off · `save_fail` · `fail_next_anchor` · `snack` s=long|normal · `clear`
+ *
+ * Room (taste profile D7): `rescan` · `ignore_scan` s=on|off (no planes at all) · `room` s=virtual|scan ·
+ * `room_page` s=on|off · `room_size` a=w,l,h · `room_move` a=right,ahead,turnDeg · `room_recenter`
  *
  * Reading back: `state` (no s) · `dump` · `pose` · `panels` · `planes` · `bounds`
  */
@@ -90,6 +95,16 @@ internal object DebugCommands {
             "restore_timeout" -> vm.debugRestoreTimeout()
             "restore" -> vm.debugRestore()
             "no_ceiling" -> TpGraph.planes.hideCeiling = s != "off"
+            "ignore_scan" -> TpGraph.planes.hideAll = s != "off"
+            "rescan" -> vm.debugRescan()
+            "room" -> vm.onEvent(PlannerEvent.RoomSourceSelected(if (s == "scan") RoomSource.SCAN else RoomSource.VIRTUAL))
+            "room_page" -> {
+                if (!vm.state.value.menuOpen && s != "off") vm.onEvent(PlannerEvent.MoreClicked)
+                vm.onEvent(PlannerEvent.RoomPageShown(s != "off"))
+            }
+            "room_size" -> vm.debugRoomSize(nums.getOrNull(0), nums.getOrNull(1), nums.getOrNull(2))
+            "room_move" -> vm.onEvent(PlannerEvent.RoomMoved(nums.getOrNull(0) ?: 0f, nums.getOrNull(1) ?: 0f, nums.getOrNull(2) ?: 0f, scene.headPose()))
+            "room_recenter" -> vm.onEvent(PlannerEvent.RoomRecentered(scene.headPose()))
             "lost" -> TpGraph.head.forceLost = s != "off"
             "unavailable" -> vm.debugSet { it.copy(blocked = s != "off", phase = if (s != "off") Phase.UNAVAILABLE else if (it.seat != null) Phase.LAYOUT else Phase.SEAT, menuOpen = false) }
             "save_fail" -> {
@@ -138,6 +153,25 @@ internal object DebugCommands {
                 name.startsWith("unit_") -> LengthUnit.entries.firstOrNull { it.tag == name.removePrefix("unit_") }?.let { PlannerEvent.UnitSelected(it) }
                 name == "menu_clear" -> PlannerEvent.ClearAllClicked
                 name == "menu_exit" -> PlannerEvent.ExitClicked
+                name == "menu_room" -> PlannerEvent.RoomPageShown(true)
+                name == "room_back" -> PlannerEvent.RoomPageShown(false)
+                name == "room_virtual" -> PlannerEvent.RoomSourceSelected(RoomSource.VIRTUAL)
+                name == "room_scan" -> PlannerEvent.RoomSourceSelected(RoomSource.SCAN)
+                name.startsWith("room_") && (name.endsWith("_minus") || name.endsWith("_plus")) -> {
+                    val d = if (name.endsWith("_plus")) VirtualRoom.SIZE_STEP_M else -VirtualRoom.SIZE_STEP_M
+                    when (name.substring(5, 6)) {
+                        "w" -> PlannerEvent.RoomResized(d, 0f, 0f)
+                        "l" -> PlannerEvent.RoomResized(0f, d, 0f)
+                        else -> PlannerEvent.RoomResized(0f, 0f, d)
+                    }
+                }
+                name == "room_left" -> PlannerEvent.RoomMoved(-VirtualRoom.MOVE_STEP_M, 0f, 0f, Probe.host?.scene()?.headPose())
+                name == "room_right" -> PlannerEvent.RoomMoved(VirtualRoom.MOVE_STEP_M, 0f, 0f, Probe.host?.scene()?.headPose())
+                name == "room_ahead" -> PlannerEvent.RoomMoved(0f, VirtualRoom.MOVE_STEP_M, 0f, Probe.host?.scene()?.headPose())
+                name == "room_backward" -> PlannerEvent.RoomMoved(0f, -VirtualRoom.MOVE_STEP_M, 0f, Probe.host?.scene()?.headPose())
+                name == "room_turn_left" -> PlannerEvent.RoomMoved(0f, 0f, -VirtualRoom.TURN_STEP_DEG, Probe.host?.scene()?.headPose())
+                name == "room_turn_right" -> PlannerEvent.RoomMoved(0f, 0f, VirtualRoom.TURN_STEP_DEG, Probe.host?.scene()?.headPose())
+                name == "room_recenter" -> PlannerEvent.RoomRecentered(Probe.host?.scene()?.headPose())
                 name == "dialog_cancel" -> PlannerEvent.DialogDismissed
                 name == "dialog_confirm" -> PlannerEvent.ClearConfirmed
                 name == "blocked_exit" -> PlannerEvent.BlockedExit
@@ -176,6 +210,7 @@ internal object DebugCommands {
         TpGraph.head.forceLost = false
         TpGraph.anchors.failNext = false
         TpGraph.planes.hideCeiling = false
+        TpGraph.planes.hideAll = false
         vm.debugHoldScanning = false
         vm.longSnacks = true
         scene.debugDragCancel()
@@ -233,6 +268,7 @@ internal object DebugCommands {
             }
             "S10" -> {
                 base(vm, scene, nums, floats)
+                vm.onEvent(PlannerEvent.RoomSourceSelected(RoomSource.SCAN))
                 TpGraph.planes.hideCeiling = true
                 later(200) { vm.onEvent(PlannerEvent.ConfigSelected(Config.C714)) }
             }
@@ -319,6 +355,7 @@ internal object DebugCommands {
             }
             "S25" -> {
                 base(vm, scene, nums, floats)
+                vm.onEvent(PlannerEvent.RoomSourceSelected(RoomSource.SCAN))
                 vm.onEvent(PlannerEvent.ConfigSelected(Config.C714))
                 later(300) {
                     val s = vm.state.value
@@ -351,6 +388,19 @@ internal object DebugCommands {
                 base(vm, scene, nums, floats)
                 // after the anchor and the 0.5 s save of the fresh seat have gone through, else they would clear the snackbar
                 later(2500) { vm.debugSaveFail() }
+            }
+            "S28" -> {
+                base(vm, scene, nums, floats)
+                later(300) {
+                    vm.onEvent(PlannerEvent.MoreClicked)
+                    vm.onEvent(PlannerEvent.RoomPageShown(true))
+                }
+            }
+            "S29" -> {
+                // a headset that finds no room: nothing scanned, the virtual room after 5 s (taste profile D7)
+                vm.longSnacks = true
+                TpGraph.planes.hideAll = true
+                later(200) { vm.debugRescan() }
             }
             else -> TpLog.w("CMD state unknown '$id'")
         }

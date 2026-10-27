@@ -7,7 +7,7 @@
 # a pooled panel needs several frames after `show` before it is drawn: never capture without `fast on`.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DEV=${DEV:-emulator-5560}
+DEV=${DEV:-emulator-5564}
 PKG=io.embodit.theaterplanner
 export PATH="$PATH:${LOCALAPPDATA}/Android/Sdk/platform-tools"
 H="bash $ROOT/tools/harness/emu.sh"

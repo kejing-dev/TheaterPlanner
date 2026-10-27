@@ -1,6 +1,6 @@
 # Theater Planner (影院规划)
 
-MR home-theater planning app for PICO OS 6 (v0.1.1). Kotlin, PICO Spatial SDK 6.1.9 (template 6.1), one Mixed Stage
+MR home-theater planning app for PICO OS 6 (v0.1.2). Kotlin, PICO Spatial SDK 6.1.9 (template 6.1), one Mixed Stage
 (Full Space only, no Shared Space version), package `io.embodit.theaterplanner`. Sit on your sofa, look at the
 TV wall and pinch: the 5.1 / 5.1.2 / 7.1.4 speakers land on your real walls and ceiling at the Dolby angles,
 with a green recommended band on each wall and a green zone on the ceiling; drag a speaker along the wall
@@ -78,6 +78,30 @@ state it writes is `panelShown` and the `readout` pill (at most 10 Hz).
   change; restore within 10 s of launch (S16) or "last layout isn't here" (S17). Anchor creation or a failed
   write -> "not saved" with Retry (S27).
 
+## The room: scanned or virtual (v0.1.2, taste profile D7)
+
+The app never waits for a scan. `PlannerUiState.room` is the room every rule works on; it comes from one of two
+sources (`RoomSource`):
+
+- **SCAN**: plane detection found a FLOOR and a WALL within 5 s of S02 (the v0.1.1 path, unchanged).
+- **VIRTUAL** (`domain/VirtualRoom.kt`): otherwise, after 5 s (`SCAN_TIMEOUT_MS`), a 4.0 x 5.0 x 2.70 m box around
+  the head, front wall ahead, the viewer 60 % back; turned into the same planes (FLOOR, 4 WALLs, CEILING with ids
+  `vr-*`) so every rule runs unchanged. Stage y = 0 is the physical ground (SDK doc "Coordinate space of Stage"),
+  so the default floor is 0. Snackbar "没扫到房间 · 先用虚拟房间" (S29). While nothing has been touched, sitting
+  re-centres the box on the seat. A scanned floor / ceiling snaps the box's floor height / height once per new
+  value ("扫到就贴上"); walls are never taken from a partial scan while the virtual room is in use.
+- Menu -> 房间 (S28): Virtual / Scanned switch (Scanned only once a floor and a wall exist), width / length /
+  height in 10 cm steps (length grows backwards, the screen wall stays), move 10 cm left / right / ahead / back
+  along the current view, turn 2 degrees, "按座位摆正". All from the seat (taste profile B17).
+- Any room change refits the layout (`PlannerViewModel.refit`): the seat keeps ear point and front, the screen
+  goes onto the new front wall, listener speakers re-land at their azimuth (taken at the wall point, not at the
+  12 cm stand-off, else every edit creeps outwards), overhead speakers keep their offset on the new ceiling.
+- The scene's tap colliders follow `state.room` (not the tracker); `RoomBoxView` draws the box edges and a 1 m
+  floor grid while the virtual room is in use.
+- The saved layout carries the virtual room relative to the anchor (`SavedRoom`), restored with it.
+- Headset finding 2026-10-26 (PB324XJGL2090081G, office): the scan gives FLOOR, CEILING (4.1 m), TABLE, SCREEN,
+  CHAIR, UNKNOWN planes but **no WALL**, which is why v0.1.1 stayed in S02 forever.
+
 ## UI rules
 
 - All 2D UI is SpatialUI inside `PicoTheme`. No Material / Material3 (gate: `../spatial-app-factory/bin/material-grep.txt`).
@@ -88,7 +112,7 @@ state it writes is `panelShown` and the `readout` pill (at most 10 Hz).
 - Launcher icon: `res/drawable/ic_launcher_foreground.xml` on velvet `#6E1F33`; `tools/make_icon.py` writes the
   3D icon layers and the 512 export (`../spatial-app-factory/apps/theater-planner/icon.png`).
 
-## Build, run (Git Bash; device commands are pinned to emulator-5560 / AVD Pico_Emulator_6_1_fresh)
+## Build, run (Git Bash; device commands are pinned to emulator-5564 / AVD PICO_6_1_Factory3 on pc1)
 
 ```bash
 tools/dev.sh build && tools/dev.sh install && tools/dev.sh launch
@@ -114,13 +138,13 @@ panels are stowed (auto = holder off, the product setting, verified to come back
 
 ## Debug commands (debug build only)
 
-`adb -s emulator-5560 shell "am broadcast -a io.embodit.theaterplanner.DEBUG -p io.embodit.theaterplanner --es cmd NAME [--es s TEXT] [--es a NUMBERS] [--es id ID] [--ef az N] [--ef x N] [--ef y N] [--ef z N] [--ef yaw N]"`
+`adb -s emulator-5564 shell "am broadcast -a io.embodit.theaterplanner.DEBUG -p io.embodit.theaterplanner --es cmd NAME [--es s TEXT] [--es a NUMBERS] [--es id ID] [--ef az N] [--ef x N] [--ef y N] [--ef z N] [--ef yaw N]"`
 or `tools/dev.sh cmd NAME [TEXT] [NUMBERS] [ID]`. Internal ids everywhere (7.1.4 side surrounds are `Lss` / `Rss`,
 shown as Ls / Rs).
 
 | cmd | arguments | effect |
 |---|---|---|
-| `state` | s=S01..S27 | jump to that design state; without `s` prints the `STATE` line |
+| `state` | s=S01..S29 | jump to that design state; without `s` prints the `STATE` line |
 | `seat` | a=x,y,z[,yaw] or --ef x/y/z/yaw (none: the head pose) | sit there (yaw in degrees about the vertical, 0 = looking along -Z) |
 | `config` | s=5.1 \| 5.1.2 \| 7.1.4 | switch the configuration |
 | `select` s=id · `tap` | | select a speaker / tap the empty room (deselect, close the menu) |
@@ -131,11 +155,14 @@ shown as Ls / Rs).
 | `ui` | s=control | press a control by name (below) |
 | `lang` s=system\|zh\|en · `unit` s=m\|ft | | settings |
 | `coach_reset` · `restore_timeout` · `restore` | | S21 / S24 again · S17 · re-run the restore (S16) |
+| `rescan` · `ignore_scan` s=on\|off (no planes at all) · `room` s=virtual\|scan · `room_page` s=on\|off · `room_size` a=w,l,h · `room_move` a=right,ahead,turnDeg · `room_recenter` | | the room (S28 / S29) |
 | `no_ceiling` s=on\|off · `lost` s=on\|off · `unavailable` s=on\|off · `save_fail` · `fail_next_anchor` | | S10 / S18 / S19 / S27 |
 | `snack` s=long\|normal · `clear` | | timed snackbars stay 60 s · clear without the dialog |
 | `dump` · `pose` · `panels` · `planes` · `bounds` | | reading back |
 
-Control names: `page_speakers page_screen reseat more cfg_5_1 cfg_5_1_2 cfg_7_1_4 absorbers reset_all size_minus
+Control names: `menu_room room_back room_virtual room_scan room_w_minus room_w_plus room_l_minus room_l_plus
+room_h_minus room_h_plus room_left room_right room_ahead room_backward room_turn_left room_turn_right room_recenter` (room page) ·
+`page_speakers page_screen reseat more cfg_5_1 cfg_5_1_2 cfg_7_1_4 absorbers reset_all size_minus
 size_plus use_recommended ratio_minus ratio_plus` (console) · `strip_reset` (speakerStrip) · `seat_here seat_cancel`
 (seatPanel) · `lang_system lang_zh lang_en unit_m unit_ft menu_clear menu_exit` (menu) · `dialog_cancel dialog_confirm
 blocked_exit` (dialog) · `snackbar_action` (snack) · `coach_ok` (coach).
@@ -150,7 +177,8 @@ frame) · S08 L dragged to -35 (readout red, arrow) · S09 Ls at -131 red · S10
 S15 menu · S16 restored snackbar (after ~5 s) · S17 elsewhere snackbar · S18 tracking lost (grey faces) · S19
 unavailable dialog · S20 clear dialog · S21 coachmark beside L · S22 reseat prompt · S23 seat at the rear wall,
 Lrs selected · S24 rear coachmark · S25 floating speaker with a stand (needs an opening behind the seat) · S26
-"standing?" snackbar · S27 "not saved" snackbar. `STATE Sxx ...` in the log lists every speaker's id, angle,
+"standing?" snackbar · S27 "not saved" snackbar · S28 menu room page · S29 nothing scanned -> virtual room snackbar
++ box (S29 turns `ignore_scan` on; `ignore_scan off` and `room scan` go back to the scanned room). `STATE Sxx ...` in the log lists every speaker's id, angle,
 lateral offset, distance and colour for the angle-table check.
 
 ## Known gaps / notes for QA

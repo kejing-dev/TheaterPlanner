@@ -7,6 +7,7 @@ import io.embodit.theaterplanner.domain.LanguagePref
 import io.embodit.theaterplanner.domain.LengthUnit
 import io.embodit.theaterplanner.domain.ProjectorGeom
 import io.embodit.theaterplanner.domain.RoomModel
+import io.embodit.theaterplanner.domain.RoomSource
 import io.embodit.theaterplanner.domain.ScreenGeom
 import io.embodit.theaterplanner.domain.ScreenMode
 import io.embodit.theaterplanner.domain.Seat
@@ -16,6 +17,7 @@ import io.embodit.theaterplanner.domain.SpeakerKind
 import io.embodit.theaterplanner.domain.SpeakerState
 import io.embodit.theaterplanner.domain.Status
 import io.embodit.theaterplanner.domain.Vec3
+import io.embodit.theaterplanner.domain.VirtualRoom
 
 enum class Phase { STARTING, SCANNING, SEAT, LAYOUT, RESEAT, UNAVAILABLE }
 
@@ -33,6 +35,8 @@ enum class SnackKind(val sticky: Boolean) {
     LOST(true),
     CLEARED(false),
     UNSAVED(true),
+    /** Nothing scanned in time: the virtual room is in use (taste profile D7). */
+    VIRTUAL_ROOM(false),
 }
 
 data class SnackUi(val kind: SnackKind, val id: Int)
@@ -56,7 +60,17 @@ enum class StatusKind { SOME_OUT, TOO_CLOSE, NO_REAR, ASSUMED_CEILING, ALL_IN, T
  */
 data class PlannerUiState(
     val phase: Phase = Phase.STARTING,
+    /** The room every rule works on: the scanned planes ([RoomSource.SCAN]) or the virtual box ([RoomSource.VIRTUAL]). */
     val room: RoomModel = RoomModel.EMPTY,
+    /** What plane detection has found so far (whatever the source). */
+    val scanned: RoomModel = RoomModel.EMPTY,
+    val roomSource: RoomSource = RoomSource.NONE,
+    /** The virtual room (kept while the scanned room is in use, so that switching back finds it again). */
+    val vroom: VirtualRoom? = null,
+    /** The user has resized or moved the virtual room (it no longer re-centres on the seat). */
+    val vroomTouched: Boolean = false,
+    /** The menu shows its room page (S28). */
+    val roomPage: Boolean = false,
     val seat: Seat? = null,
     val config: Config = Config.C51,
     val page: Page = Page.SPEAKERS,
@@ -109,6 +123,10 @@ data class PlannerUiState(
     val selectedSpeaker: SpeakerState?
         get() = selected?.let { id -> speakers.firstOrNull { it.id == id } }
 
+    /** The scanned room can carry the layout (a floor and a wall). */
+    val scanUsable: Boolean
+        get() = scanned.hasFloor && scanned.hasWall
+
     val overheadAssumed: Boolean
         get() = !room.hasCeiling && speakers.any { it.def.kind == SpeakerKind.OVERHEAD }
 
@@ -152,6 +170,7 @@ data class PlannerUiState(
                 phase == Phase.STARTING -> "S01"
                 phase == Phase.SCANNING -> "S02"
                 restore == RestoreState.ELSEWHERE -> "S17"
+                phase == Phase.SEAT && snack?.kind == SnackKind.VIRTUAL_ROOM -> "S29"
                 phase == Phase.SEAT -> "S03"
                 clearDialog -> "S20"
                 trackingLost -> "S18"
@@ -159,6 +178,7 @@ data class PlannerUiState(
                 snack?.kind == SnackKind.UNSAVED -> "S27"
                 snack?.kind == SnackKind.STANDING || snack?.kind == SnackKind.TOO_LOW -> "S26"
                 restore == RestoreState.RESTORED && snack?.kind == SnackKind.RESTORED -> "S16"
+                menuOpen && roomPage -> "S28"
                 menuOpen -> "S15"
                 rearCoach != null -> "S24"
                 coach -> "S21"
@@ -247,6 +267,20 @@ sealed interface PlannerEvent {
     data object SnackClosed : PlannerEvent
 
     data object CoachDismissed : PlannerEvent
+
+    /** Menu: open / close the room page. */
+    data class RoomPageShown(val shown: Boolean) : PlannerEvent
+
+    data class RoomSourceSelected(val source: RoomSource) : PlannerEvent
+
+    /** Virtual room size steps, metres (taste profile D7). */
+    data class RoomResized(val dw: Float, val dl: Float, val dh: Float) : PlannerEvent
+
+    /** Virtual room nudges: [right] / [ahead] metres along the viewer's level heading, [turnDeg] about the room centre. */
+    data class RoomMoved(val right: Float, val ahead: Float, val turnDeg: Float, val head: HeadPose?) : PlannerEvent
+
+    /** Virtual room: put it back around the seat (or the head) at the current size. */
+    data class RoomRecentered(val head: HeadPose?) : PlannerEvent
 
     data object RearCoachDismissed : PlannerEvent
 }

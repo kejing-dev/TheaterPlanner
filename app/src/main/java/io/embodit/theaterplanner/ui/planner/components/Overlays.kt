@@ -35,8 +35,10 @@ import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.foundation.material.backgroundMaterial
 import com.pico.spatial.ui.platform.Material
 import io.embodit.theaterplanner.R
+import io.embodit.theaterplanner.domain.HeadPose
 import io.embodit.theaterplanner.domain.LanguagePref
 import io.embodit.theaterplanner.domain.LengthUnit
+import io.embodit.theaterplanner.domain.RoomSource
 import io.embodit.theaterplanner.ui.planner.Phase
 import io.embodit.theaterplanner.ui.planner.PlannerEvent
 import io.embodit.theaterplanner.ui.planner.PlannerUiState
@@ -94,9 +96,17 @@ internal fun SeatPanel(state: PlannerUiState?, onSeatHere: () -> Unit, onEvent: 
     }
 }
 
-/** The More menu (design `panels.menu`): language and unit segments that act in place, Clear all, Exit. */
+/** The More menu (design `panels.menu`): its main page, or the room page (S28). */
 @Composable
-internal fun MoreMenu(state: PlannerUiState?, onEvent: (PlannerEvent) -> Unit) {
+internal fun MoreMenu(state: PlannerUiState?, head: () -> HeadPose?, onEvent: (PlannerEvent) -> Unit) {
+    Box(modifier = Modifier.size(PanelSizes.MENU_PANEL_W.dp, PanelSizes.MENU_PANEL_H.dp), contentAlignment = Alignment.BottomEnd) {
+        if (state?.roomPage == true) RoomPage(state = state, head = head, onEvent = onEvent) else MenuPage(state = state, onEvent = onEvent)
+    }
+}
+
+/** The menu's main page: language and unit segments that act in place, the room, Clear all, Exit. */
+@Composable
+private fun MenuPage(state: PlannerUiState?, onEvent: (PlannerEvent) -> Unit) {
     Column(
         modifier =
             Modifier
@@ -134,6 +144,21 @@ internal fun MoreMenu(state: PlannerUiState?, onEvent: (PlannerEvent) -> Unit) {
             name = { "unit_${it.tag}" },
             onSelect = { onEvent(PlannerEvent.UnitSelected(it)) },
         ) { item -> Text(text = rs(if (item == LengthUnit.M) R.string.unit_m else R.string.unit_ft), color = ink, style = TpType.label, maxLines = 1) }
+        // the room (taste profile D7): which one is in use and its size, opens the room page
+        val v = state.vroom
+        val roomText =
+            if (state.roomSource == RoomSource.SCAN || v == null) rs(R.string.menu_room) + " · " + rs(R.string.room_src_scan)
+            else rs(R.string.menu_room) + " · " + String.format(java.util.Locale.US, "%.1f × %.1f × %.1f", v.width, v.length, v.height) + (if (state.unit == LengthUnit.M) " m" else "")
+        Button(
+            onClick = { onEvent(PlannerEvent.RoomPageShown(true)) },
+            modifier = Modifier.fillMaxWidth().probe("menu_room"),
+            size = ButtonDefaults.Regular.copy(height = RowH),
+            shape = CircleShape,
+            colors = ButtonDefaults.buttonColors(containerColor = PicoTheme.colorScheme.fillTertiary, contentColor = ink),
+        ) {
+            Text(text = roomText, color = ink, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Icon(painter = painterResource(R.drawable.ic_arrow), contentDescription = null, modifier = Modifier.size(18.dp), tint = ink)
+        }
         Row(modifier = Modifier.fillMaxWidth().height(RowH), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val canClear = state.seat != null
             val clearInk = if (canClear) ink else PicoTheme.colorScheme.labelQuaternary
@@ -225,6 +250,7 @@ internal fun SnackPanel(snack: SnackUi?, onEvent: (PlannerEvent) -> Unit) {
                 SnackKind.LOST -> Triple(R.drawable.ic_unavailable, rs(R.string.snack_lost), null)
                 SnackKind.CLEARED -> Triple(R.drawable.ic_check, rs(R.string.snack_cleared), null)
                 SnackKind.UNSAVED -> Triple(R.drawable.ic_warning, rs(R.string.snack_unsaved), R.string.action_retry to R.drawable.ic_reset)
+                SnackKind.VIRTUAL_ROOM -> Triple(R.drawable.ic_check, rs(R.string.snack_virtual_room), null)
             }
         val tint = if (snack.kind == SnackKind.STANDING || snack.kind == SnackKind.TOO_LOW) PicoTheme.colorScheme.alert else ink
         Row(

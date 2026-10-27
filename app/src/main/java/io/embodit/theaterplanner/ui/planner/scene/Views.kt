@@ -9,6 +9,7 @@ import io.embodit.theaterplanner.domain.ScreenGeom
 import io.embodit.theaterplanner.domain.ScreenMode
 import io.embodit.theaterplanner.domain.Status
 import io.embodit.theaterplanner.domain.Vec3
+import io.embodit.theaterplanner.domain.VirtualRoom
 import kotlin.math.atan2
 
 /** Dimensions of the basic-shape speakers (design `entities3d`). */
@@ -290,5 +291,74 @@ internal class ArrowView(root: Entity, meshes: TpMeshes, m: TpMaterials) {
         shaft.hide()
         headA.hide()
         headB.hide()
+    }
+}
+
+/**
+ * The virtual room (taste profile D7): its 12 edges as light lines and a 1 m grid on the floor, so the
+ * box can be lined up with the real room. Drawn on change only.
+ */
+internal class RoomBoxView(root: Entity, meshes: TpMeshes, m: TpMaterials) {
+    private val edges = List(12) { Strip(root, meshes.band, m.stand, "vroom:edge$it") }
+    private val grid = List(GRID_MAX * 2) { Strip(root, meshes.band, m.gridWhite, "vroom:grid$it") }
+    private var drawn: VirtualRoom? = null
+
+    fun draw(v: VirtualRoom) {
+        if (v == drawn) return
+        drawn = v
+        val c = v.corners()
+        val lo = c.map { it.at(v.floorY + 0.004f) }
+        val hi = c.map { it.at(v.ceilingY - 0.004f) }
+        val mid = v.center
+        for (i in 0 until 4) {
+            val j = (i + 1) % 4
+            edges[i].draw(lo[i], lo[j], EDGE_W, Vec3.UP)
+            edges[4 + i].draw(hi[i], hi[j], EDGE_W, Vec3(0f, -1f, 0f))
+            val inward = (mid - c[i]).normalized().at(0f)
+            edges[8 + i].draw(lo[i], hi[i], EDGE_W, inward)
+        }
+        // grid lines across (parallel to the front wall) and along, every metre from the centre
+        val f = v.forward
+        val r = v.right
+        var n = 0
+        val halfL = v.length / 2f
+        val halfW = v.width / 2f
+        var k = -kotlin.math.floor(halfL).toInt()
+        while (k <= kotlin.math.floor(halfL).toInt() && n < GRID_MAX) {
+            if (kotlin.math.abs(kotlin.math.abs(k.toFloat()) - halfL) > 0.05f) {
+                val p = mid + f * k.toFloat()
+                grid[n++].draw((p - r * halfW).at(v.floorY + 0.003f), (p + r * halfW).at(v.floorY + 0.003f), GRID_W, Vec3.UP)
+            }
+            k++
+        }
+        for (i in n until GRID_MAX) grid[i].hide()
+        var m = 0
+        k = -kotlin.math.floor(halfW).toInt()
+        while (k <= kotlin.math.floor(halfW).toInt() && m < GRID_MAX) {
+            if (kotlin.math.abs(kotlin.math.abs(k.toFloat()) - halfW) > 0.05f) {
+                val p = mid + r * k.toFloat()
+                grid[GRID_MAX + m++].draw((p - f * halfL).at(v.floorY + 0.003f), (p + f * halfL).at(v.floorY + 0.003f), GRID_W, Vec3.UP)
+            }
+            k++
+        }
+        for (i in m until GRID_MAX) grid[GRID_MAX + i].hide()
+    }
+
+    fun hide() {
+        if (drawn == null) return
+        drawn = null
+        edges.forEach { it.hide() }
+        grid.forEach { it.hide() }
+    }
+
+    fun destroy() {
+        edges.forEach { it.destroy() }
+        grid.forEach { it.destroy() }
+    }
+
+    private companion object {
+        const val GRID_MAX = 16
+        const val EDGE_W = 0.015f
+        const val GRID_W = 0.006f
     }
 }

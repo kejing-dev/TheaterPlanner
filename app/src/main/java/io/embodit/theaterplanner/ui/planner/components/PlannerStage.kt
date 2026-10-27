@@ -83,7 +83,7 @@ internal fun PlannerStage(state: PlannerUiState, scene: PlannerScene, onEvent: (
                 }
             }
             AttachmentPanel(PanelIds.MENU) {
-                PoolPanel(PanelIds.MENU, scene, pressed = { scene.onConsolePointer() }) { inView -> MoreMenu(state = if (inView) state else null, onEvent = onEvent) }
+                PoolPanel(PanelIds.MENU, scene, pressed = { scene.onConsolePointer() }) { inView -> MoreMenu(state = if (inView) state else null, head = { scene.headPose() }, onEvent = onEvent) }
             }
             AttachmentPanel(PanelIds.DIALOG) {
                 PoolPanel(PanelIds.DIALOG, scene) { inView -> DialogPanel(clear = inView && state.clearDialog, blocked = inView && state.blocked, onEvent = onEvent) }

@@ -64,7 +64,12 @@ data class SavedLayout(
     val mode: ScreenMode,
     val ratio: Float,
     val absorbers: Boolean,
+    /** The virtual room the layout was made in (taste profile D7); null when the scanned room was used. */
+    val room: SavedRoom? = null,
 )
+
+/** A virtual room relative to the anchor: floor centre, forward direction, size, floor height. */
+data class SavedRoom(val center: P2, val forward: P2, val width: Float, val length: Float, val height: Float, val floorY: Float)
 
 object LayoutCodec {
     fun encode(l: SavedLayout): String {
@@ -85,6 +90,16 @@ object LayoutCodec {
         o.put("mode", l.mode.tag)
         o.put("ratio", l.ratio.toDouble())
         o.put("absorbers", l.absorbers)
+        l.room?.let { r ->
+            val ro = JSONObject()
+            ro.put("c", p2(r.center))
+            ro.put("f", p2(r.forward))
+            ro.put("w", r.width.toDouble())
+            ro.put("l", r.length.toDouble())
+            ro.put("h", r.height.toDouble())
+            ro.put("floorY", r.floorY.toDouble())
+            o.put("room", ro)
+        }
         return o.toString()
     }
 
@@ -110,6 +125,10 @@ object LayoutCodec {
                     mode = ScreenMode.byTag(o.optString("mode", "tv")),
                     ratio = o.optDouble("ratio", ProjectorRules.RATIO_DEFAULT.toDouble()).toFloat(),
                     absorbers = o.optBoolean("absorbers", false),
+                    room =
+                        o.optJSONObject("room")?.let { ro ->
+                            SavedRoom(p2(ro.getJSONArray("c")), p2(ro.getJSONArray("f")), ro.getDouble("w").toFloat(), ro.getDouble("l").toFloat(), ro.getDouble("h").toFloat(), ro.getDouble("floorY").toFloat())
+                        },
                 )
             }
             .getOrNull()

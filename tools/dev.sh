@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Theater Planner developer helper (Git Bash). Device commands are pinned to the factory lane
-# emulator-5560 (AVD Pico_Emulator_6_1_fresh) and refuse to run when that serial is another AVD.
+# emulator-5564 (AVD PICO_6_1_Factory3) and refuse to run when that serial is another AVD.
 #
 #   tools/dev.sh build                 assembleDebug            -> .scratch/build.log
 #   tools/dev.sh install | launch | stop | relaunch
@@ -8,8 +8,8 @@
 #   tools/dev.sh state S04             jump to a design state
 #   tools/dev.sh log [REGEX] [LINES]   logcat, tag TheaterPlanner
 #   tools/dev.sh crash                 last crash lines of the app
-DEV=${DEV:-emulator-5560}
-AVD=${AVD:-Pico_Emulator_6_1_fresh}
+DEV=${DEV:-emulator-5564}
+AVD=${AVD:-PICO_6_1_Factory3}
 PKG=io.embodit.theaterplanner
 TAG=TheaterPlanner
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

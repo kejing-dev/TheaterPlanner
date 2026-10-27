@@ -26,6 +26,7 @@ import io.embodit.theaterplanner.domain.P2
 import io.embodit.theaterplanner.domain.PanelFacing
 import io.embodit.theaterplanner.domain.Quat4
 import io.embodit.theaterplanner.domain.RoomModel
+import io.embodit.theaterplanner.domain.RoomSource
 import io.embodit.theaterplanner.domain.ScreenMode
 import io.embodit.theaterplanner.domain.ScreenRules
 import io.embodit.theaterplanner.domain.Seat
@@ -153,6 +154,7 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
     private val absorberViews = ArrayList<AbsorberView>()
     private var seatMark: SeatMarkView? = null
     private var grid: GridView? = null
+    private var roomBox: RoomBoxView? = null
     private var arrow: ArrowView? = null
     private var soundLine: Strip? = null
     private var gazeFrame: Frame? = null
@@ -228,7 +230,7 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         rig.world(PanelIds.STRIP, PanelSizes.STRIP_W, PanelSizes.STRIP_H, 1f)
         rig.world(PanelIds.READOUT, PanelSizes.READOUT_W, PanelSizes.READOUT_H, 1f)
         rig.world(PanelIds.SIZE_TAG, PanelSizes.SIZE_TAG_W, PanelSizes.SIZE_TAG_H, 1f)
-        rig.world(PanelIds.MENU, PanelSizes.MENU_W, PanelSizes.MENU_H, CONSOLE_SCALE)
+        rig.world(PanelIds.MENU, PanelSizes.MENU_PANEL_W, PanelSizes.MENU_PANEL_H, CONSOLE_SCALE)
         rig.world(PanelIds.DIALOG, PanelSizes.DIALOG_W, PanelSizes.DIALOG_H, DIALOG_SCALE)
         rig.world(PanelIds.SNACK, PanelSizes.SNACK_W, PanelSizes.SNACK_H, SNACK_SCALE)
         rig.world(PanelIds.COACH, PanelSizes.COACH_W, PanelSizes.COACH_H, COACH_SCALE)
@@ -267,7 +269,7 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         val colliders = RoomColliders(root)
         colliders.buildBackstop()
         this.colliders = colliders
-        colliders.sync(planes.all)
+        colliders.sync(ui.room.planes)
         yield()
         screenView = ScreenView(root, meshes, m)
         projectorView = ProjectorView(root, meshes, m)
@@ -291,7 +293,7 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
 
     private fun startSensing() {
         planes.start {
-            colliders?.sync(planes.all)
+            // the colliders follow the room in use (scanned or virtual), see render()
             sink(PlannerEvent.PlanesChanged(RoomModel(planes.all.toList())))
         }
     }
@@ -350,6 +352,8 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         standViews.values.forEach { it.destroy() }
         standViews.clear()
         absorberViews.clear()
+        roomBox?.destroy()
+        roomBox = null
         runCatching { colliders?.clear() }
         colliders = null
         runCatching { rig?.release() }
@@ -417,6 +421,8 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
                 } else if (sp.id !in zoneViews) zoneViews[sp.id] = ZoneView(root, meshes, m, sp.id)
             }
         }
+        if (state.room != before.room) colliders?.sync(state.room.planes)
+        drawRoom(state)
         if (before.dragging != null && state.dragging == null) clearLive()
         awaitCommit?.let { (id, _) ->
             if (state.positions[id] != before.positions[id]) {
@@ -426,6 +432,18 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         }
         drawStatic(state)
         panels(state)
+    }
+
+    /** The virtual room box while it is the room in use (taste profile D7). */
+    private fun drawRoom(state: PlannerUiState) {
+        val v = state.vroom
+        val on = v != null && state.roomSource == RoomSource.VIRTUAL && state.phase != Phase.STARTING && state.phase != Phase.UNAVAILABLE
+        if (!on) {
+            roomBox?.hide()
+            return
+        }
+        val box = roomBox ?: RoomBoxView(stageRoot ?: return, meshes ?: return, materials ?: return).also { roomBox = it }
+        box.draw(v!!)
     }
 
     /** Everything that only changes with the state (not per frame). */
@@ -810,8 +828,8 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         val cw = PanelSizes.CONSOLE_W * DP_M * CONSOLE_SCALE
         val ch = PanelSizes.CONSOLE_H * DP_M * CONSOLE_SCALE
         if (state.menuOpen) {
-            val mw = PanelSizes.MENU_W * DP_M * CONSOLE_SCALE
-            val mh = PanelSizes.MENU_H * DP_M * CONSOLE_SCALE
+            val mw = PanelSizes.MENU_PANEL_W * DP_M * CONSOLE_SCALE
+            val mh = PanelSizes.MENU_PANEL_H * DP_M * CONSOLE_SCALE
             rig[PanelIds.MENU]?.moveTo(console.position + facing.up * (ch / 2f + mh / 2f + 0.008f) + facing.right * (cw / 2f - mw / 2f) + facing.normal * 0.01f)
         }
         if (state.phase == Phase.SEAT || state.phase == Phase.RESEAT) seatFollow.step(pose, now, hold = false)?.let { rig[PanelIds.SEAT]?.show(it) }

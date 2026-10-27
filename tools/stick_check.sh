@@ -6,7 +6,7 @@
 # Prints the STATE / STICK / SNAP lines after each case. Needs the app in LAYOUT with the default seat (tools/qa_shot.sh S04 first).
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DEV=${DEV:-emulator-5560}; PKG=io.embodit.theaterplanner
+DEV=${DEV:-emulator-5564}; PKG=io.embodit.theaterplanner
 export PATH="$PATH:${LOCALAPPDATA}/Android/Sdk/platform-tools"
 H="bash $ROOT/tools/harness/emu.sh"
 cmd() { MSYS_NO_PATHCONV=1 adb -s $DEV shell "am broadcast -a $PKG.DEBUG -p $PKG --es cmd $1 ${2:+--es s $2} ${3:+--es a $3}" >/dev/null 2>&1; }

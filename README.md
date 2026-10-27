@@ -6,7 +6,7 @@
 
 **Sit on your sofa and pinch: where each 5.1 / 5.1.2 / 7.1.4 speaker goes, how big the TV should be, where the projector hangs and where the absorbers stick — drawn straight onto your real walls and ceiling.**
 
-PICO OS 6 · PICO Spatial SDK 6.1 · Kotlin / SpatialUI · package `io.embodit.theaterplanner` · v0.1.1 (pre-release / 预发布)
+PICO OS 6 · PICO Spatial SDK 6.1 · Kotlin / SpatialUI · package `io.embodit.theaterplanner` · v0.1.2 (pre-release / 预发布)
 
 > **模拟器 QA 通过，真机未验证（Simulator-QA passed; not yet verified on a real headset）**
 
@@ -64,6 +64,7 @@ v0.1.0 里，音箱停在推荐位时推摇杆纹丝不动（每帧刚转一点�
 
 ### 版本
 
+- **v0.1.2**：扫不到房间也能用——5 秒内没扫到地面和墙就直接进一个 4 × 5 × 2.7 m 的虚拟房间（之前在头显上一直卡在「正在扫描」：真机只扫到地面、天花板和家具，没有墙）。菜单 → 房间 里调长宽高、平移、转向、按座位摆正，全程坐着就能做；扫到真实地面 / 天花板会自动贴上；音箱、屏幕、投影机都按这个房间算，改房间后会跟着重新落位。
 - **v0.1.1**：修好摇杆从推荐位推不动的问题（QA 第 1 轮打回的唯一一条）；推动期间不吸附、松手再判一次，并去掉了每帧 0.1° 的漂移。QA 第 2 轮在模拟器上复查通过。
 - v0.1.0：首个版本。
 
@@ -103,6 +104,7 @@ See the gallery above: 5.1.2 ceiling zones, dragging with the live readout, out-
 
 ### Versions
 
+- **v0.1.2**: never stuck scanning. If no floor and wall are found within 5 s, a 4 x 5 x 2.7 m virtual room is used right away (on the headset the scan returned floor, ceiling and furniture but no walls, so v0.1.1 waited forever). Menu -> Room sets width / length / height, nudges and turns the box to line it up with the real walls, all from the seat; a scanned floor / ceiling snaps on by itself; speakers, screen and projector follow the room.
 - **v0.1.1**: fixes the thumbstick doing nothing on a speaker at its recommended spot (the only finding QA round 1 sent back): no snapping while the stick is pushed, one snap check on release, and no more 0.1° per-frame drift. Re-checked and passed in QA round 2 on the emulator.
 - v0.1.0: first build.
 

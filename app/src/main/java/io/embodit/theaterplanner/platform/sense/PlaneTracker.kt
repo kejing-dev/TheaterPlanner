@@ -28,8 +28,20 @@ class PlaneTracker {
             main.post { onChange?.invoke() }
         }
 
+    /** Debug: every plane is withheld, as on a headset that finds no room (taste profile D7, S29). */
+    @Volatile var hideAll = false
+        set(value) {
+            field = value
+            main.post { onChange?.invoke() }
+        }
+
     val all: Collection<PlaneSurface>
-        get() = if (hideCeiling) surfaces.values.filter { it.semantic != "CEILING" } else surfaces.values
+        get() =
+            when {
+                hideAll -> emptyList()
+                hideCeiling -> surfaces.values.filter { it.semantic != "CEILING" }
+                else -> surfaces.values
+            }
 
     fun start(onChange: () -> Unit) {
         if (subscription != null) return

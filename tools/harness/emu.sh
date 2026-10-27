@@ -24,8 +24,8 @@
 #   emu.sh pose                                 head pose (needs the app's `pose` debug command)
 #   emu.sh calibrate [args]                     see calibrate.py
 set -u
-DEV="${DEV:-emulator-5560}"
-AVD="${AVD:-Pico_Emulator_6_1_fresh}"
+DEV="${DEV:-emulator-5564}"
+AVD="${AVD:-PICO_6_1_Factory3}"
 PKG="${PKG:-io.embodit.theaterplanner}"
 TAG="${TAG:-TheaterPlanner}"
 HERE="$(cd "$(dirname "$0")" && pwd)"

@@ -15,7 +15,9 @@ import io.embodit.theaterplanner.domain.P2
 import io.embodit.theaterplanner.domain.ProjectorRules
 import io.embodit.theaterplanner.domain.ReflectionRules
 import io.embodit.theaterplanner.domain.RoomModel
+import io.embodit.theaterplanner.domain.RoomSource
 import io.embodit.theaterplanner.domain.SavedLayout
+import io.embodit.theaterplanner.domain.SavedRoom
 import io.embodit.theaterplanner.domain.ScreenMode
 import io.embodit.theaterplanner.domain.ScreenRules
 import io.embodit.theaterplanner.domain.Seat
@@ -24,6 +26,7 @@ import io.embodit.theaterplanner.domain.SpeakerKind
 import io.embodit.theaterplanner.domain.SpeakerState
 import io.embodit.theaterplanner.domain.Theater
 import io.embodit.theaterplanner.domain.Vec3
+import io.embodit.theaterplanner.domain.VirtualRoom
 import io.embodit.theaterplanner.platform.TpGraph
 import io.embodit.theaterplanner.platform.TpLog
 import java.util.Locale
@@ -46,6 +49,8 @@ class PlannerViewModel(
     private val anchors: AnchorGateway,
     private val store: LayoutStore,
     private val blockReason: () -> String?,
+    /** The head pose of this moment (the virtual room is put around it), null before the first sample. */
+    private val headPose: () -> HeadPose? = { null },
     scopeOverride: CoroutineScope? = null,
 ) : ViewModel() {
 
@@ -68,6 +73,9 @@ class PlannerViewModel(
     private var blockJob: Job? = null
     private var coachJob: Job? = null
     private var anchorJob: Job? = null
+    private var fallbackJob: Job? = null
+    private var snappedFloor: Float? = null
+    private var snappedCeiling: Float? = null
     private var lastLogged: String? = null
     private var lastLoggedLine: String? = null
 
@@ -106,7 +114,16 @@ class PlannerViewModel(
             is PlannerEvent.SizeStepped -> if (s.consoleEnabled) stepSize(e.delta)
             PlannerEvent.UseRecommended -> if (s.consoleEnabled) changeThenSave { it.copy(inches = it.advice?.use) }
             is PlannerEvent.RatioStepped -> if (s.consoleEnabled) changeThenSave { it.copy(ratio = (it.ratio + e.delta * ProjectorRules.RATIO_STEP).coerceIn(ProjectorRules.RATIO_MIN, ProjectorRules.RATIO_MAX)) }
-            PlannerEvent.MoreClicked -> if (s.consoleEnabled) update { it.copy(menuOpen = !it.menuOpen) }
+            PlannerEvent.MoreClicked -> if (s.consoleEnabled) update { it.copy(menuOpen = !it.menuOpen, roomPage = false) }
+            is PlannerEvent.RoomPageShown -> if (s.menuOpen || !e.shown) update { it.copy(roomPage = e.shown) }
+            is PlannerEvent.RoomSourceSelected -> if (s.consoleEnabled) selectSource(e.source, "menu")
+            is PlannerEvent.RoomResized -> if (s.consoleEnabled) editRoom("resize") { it.resized(e.dw, e.dl, e.dh) }
+            is PlannerEvent.RoomMoved ->
+                if (s.consoleEnabled) {
+                    val frame = e.head?.level() ?: s.seat?.f ?: s.vroom?.forward ?: P2(0f, -1f)
+                    editRoom("move") { it.moved(frame, e.right, e.ahead, e.turnDeg) }
+                }
+            is PlannerEvent.RoomRecentered -> if (s.consoleEnabled) editRoom("recenter") { v -> virtualAround(v, e.head) }
             is PlannerEvent.LanguageSelected -> settings { it.copy(language = e.language) }
             is PlannerEvent.UnitSelected -> settings { it.copy(unit = e.unit) }
             PlannerEvent.ClearAllClicked -> update { it.copy(menuOpen = false, clearDialog = true) }
@@ -156,6 +173,13 @@ class PlannerViewModel(
     private fun enterScanning() {
         update { it.copy(phase = Phase.SCANNING, snack = SnackUi(SnackKind.SCANNING, ++snackSeq)) }
         if (saved != null) startRestore()
+        // never stuck scanning (taste profile D7): no usable scan in 5 s -> the virtual room
+        fallbackJob?.cancel()
+        fallbackJob =
+            scope.launch {
+                delay(SCAN_TIMEOUT_MS)
+                if (_state.value.roomSource == RoomSource.NONE && !debugHoldScanning) useVirtual("timeout")
+            }
         advanceFromScanning()
     }
 
@@ -171,18 +195,31 @@ class PlannerViewModel(
     @Volatile var debugHoldScanning = false
 
     private fun advanceFromScanning() {
-        val s = _state.value
-        if (s.phase != Phase.SCANNING || debugHoldScanning) return
-        if (!s.room.hasFloor || !s.room.hasWall) return
-        if (s.restore == RestoreState.LOOKING) return // the restore decides
-        update { it.copy(phase = Phase.SEAT, snack = null) }
+        if (_state.value.phase != Phase.SCANNING || debugHoldScanning) return
+        if (_state.value.roomSource == RoomSource.NONE) {
+            if (!_state.value.scanUsable) return
+            fallbackJob?.cancel()
+            update { it.copy(roomSource = RoomSource.SCAN) }
+            applyRoom("scanned")
+        }
+        if (_state.value.restore == RestoreState.LOOKING) return // the restore decides
+        update { it.copy(phase = Phase.SEAT, snack = if (it.snack?.kind == SnackKind.SCANNING) null else it.snack) }
     }
 
-    private fun onPlanes(room: RoomModel) {
+    private fun onPlanes(scanned: RoomModel) {
+        update { it.copy(scanned = scanned) }
+        when (_state.value.roomSource) {
+            RoomSource.NONE -> advanceFromScanning()
+            RoomSource.VIRTUAL -> snapToScan()
+            RoomSource.SCAN -> onScannedPlanes(scanned)
+        }
+    }
+
+    /** The scanned room in use changed (v0.1.1 behaviour): the room follows, speakers stay, a late ceiling re-seats the overhead ones. */
+    private fun onScannedPlanes(room: RoomModel) {
         val s = _state.value
         val hadCeiling = s.room.hasCeiling
         update { it.copy(room = room) }
-        if (s.phase == Phase.SCANNING) advanceFromScanning()
         if (_state.value.inLayout || _state.value.phase == Phase.RESEAT) {
             // a ceiling that arrives after the overhead speakers were placed on the assumed one re-seats them (design S10)
             if (!hadCeiling && room.hasCeiling) {
@@ -197,6 +234,130 @@ class PlannerViewModel(
             }
             update { evaluate(it) }
         }
+    }
+
+    // ---- the room: scanned or virtual (taste profile D7) ------------------------------------
+
+    /** The virtual room around the seat (or the head, or the Stage origin) at [size]'s dimensions; the scanned floor when known. */
+    private fun virtualAround(size: VirtualRoom?, head: HeadPose?): VirtualRoom {
+        val s = _state.value
+        val seat = s.seat
+        val at = seat?.let { P2.of(it.ear) } ?: head?.let { P2.of(it.position) } ?: P2.ZERO
+        val facing = seat?.f ?: head?.level() ?: P2(0f, -1f)
+        val floorY = s.scanned.floorY ?: size?.floorY ?: 0f
+        return VirtualRoom.around(at, facing, size?.width ?: VirtualRoom.DEFAULT_W, size?.length ?: VirtualRoom.DEFAULT_L, size?.height ?: VirtualRoom.DEFAULT_H, floorY)
+    }
+
+    /** Nothing usable scanned in time (or the restore needs a room now): the virtual room, [given] or a default one around the head. */
+    private fun useVirtual(reason: String, given: VirtualRoom? = null) {
+        fallbackJob?.cancel()
+        val s = _state.value
+        val v = given ?: s.vroom ?: virtualAround(null, headPose())
+        val snack = if (s.snack == null || s.snack.kind == SnackKind.SCANNING) SnackUi(SnackKind.VIRTUAL_ROOM, ++snackSeq) else null
+        update { it.copy(vroom = v, roomSource = RoomSource.VIRTUAL, vroomTouched = it.vroomTouched || given != null, snack = snack ?: it.snack) }
+        if (snack != null) timedSnack(snack, VIRTUAL_SNACK_MS)
+        TpLog.i(String.format(Locale.US, "ROOM virtual reason=%s size=%s center=(%.2f, %.2f) yaw=%.1f floor=%.2f scanned=%d", reason, v.label, v.center.x, v.center.z, v.yawDeg, v.floorY, s.scanned.planes.size))
+        snapToScan(relayout = false)
+        applyRoom("virtual")
+        advanceFromScanning()
+    }
+
+    /** Menu: the scanned room (needs a floor and a wall) or the virtual one. */
+    private fun selectSource(source: RoomSource, reason: String) {
+        val s = _state.value
+        if (source == s.roomSource || source == RoomSource.NONE) return
+        if (source == RoomSource.SCAN && !s.scanUsable) return
+        update { it.copy(roomSource = source, vroom = if (source == RoomSource.VIRTUAL) it.vroom ?: virtualAround(null, headPose()) else it.vroom) }
+        TpLog.i("ROOM source=$source via=$reason")
+        applyRoom(reason)
+        scheduleSave()
+    }
+
+    /** A size / position change of the virtual room by the user. */
+    private fun editRoom(reason: String, f: (VirtualRoom) -> VirtualRoom) {
+        val s = _state.value
+        if (s.roomSource != RoomSource.VIRTUAL) return
+        val v = s.vroom ?: return
+        val next = f(v)
+        if (next == v) return
+        update { it.copy(vroom = next, vroomTouched = true) }
+        TpLog.i(String.format(Locale.US, "ROOM %s size=%s center=(%.2f, %.2f) yaw=%.1f", reason, next.label, next.center.x, next.center.z, next.yawDeg))
+        applyRoom(reason)
+        scheduleSave()
+    }
+
+    /** A scanned floor or ceiling snaps the virtual room's floor height / height, once per new value. */
+    private fun snapToScan(relayout: Boolean = true) {
+        val s = _state.value
+        val v = s.vroom ?: return
+        var next = v
+        val floor = s.scanned.floorY
+        val lastFloor = snappedFloor
+        if (floor != null && (lastFloor == null || abs(floor - lastFloor) > SNAP_EPS_M) && abs(floor - v.floorY) > SNAP_EPS_M) {
+            snappedFloor = floor
+            next = next.copy(floorY = floor)
+        }
+        val ceiling = s.scanned.ceiling?.centroid?.y
+        val lastCeiling = snappedCeiling
+        if (ceiling != null && (lastCeiling == null || abs(ceiling - lastCeiling) > SNAP_EPS_M)) {
+            val h = ceiling - next.floorY
+            if (h in VirtualRoom.MIN_H..VirtualRoom.MAX_H && abs(h - next.height) > SNAP_EPS_M) {
+                snappedCeiling = ceiling
+                next = next.copy(height = Math.round(h * 100f) / 100f)
+            }
+        }
+        if (next == v) return
+        TpLog.i(String.format(Locale.US, "ROOM snapped floor=%.2f height=%.2f (scan)", next.floorY, next.height))
+        update { it.copy(vroom = next) }
+        if (relayout && _state.value.roomSource == RoomSource.VIRTUAL) {
+            applyRoom("snap")
+            scheduleSave()
+        }
+    }
+
+    /** The room every rule works on, from the source; a seated layout is fitted into it. */
+    private fun applyRoom(reason: String) {
+        val s = _state.value
+        val room = if (s.roomSource == RoomSource.VIRTUAL) s.vroom?.model ?: s.scanned else s.scanned
+        if (room == s.room) return
+        update { it.copy(room = room) }
+        TpLog.i("ROOM use reason=$reason source=${s.roomSource} planes=${room.planes.size} ceiling=${room.hasCeiling}")
+        refit(s.room)
+    }
+
+    /**
+     * The walls moved: the seat keeps its ear point and front direction (the screen goes onto the new front
+     * wall), every listener-level speaker re-lands on the walls at its azimuth, every overhead one keeps its
+     * offset from the seat on the new ceiling.
+     */
+    private fun refit(oldRoom: RoomModel) {
+        val s = _state.value
+        val old = s.seat ?: return
+        if (!(s.phase == Phase.LAYOUT || s.phase == Phase.RESEAT)) return
+        val room = s.room
+        val seat = Seat.first(old.ear, old.f, room)
+        val positions = LinkedHashMap<String, Vec3>()
+        val noWall = s.noWall.toMutableSet()
+        for ((id, pos) in s.positions) {
+            val def = SpeakerDef.ALL.firstOrNull { it.id == id }
+            if (def == null) {
+                positions[id] = pos
+                continue
+            }
+            val xz = P2.of(pos)
+            if (def.kind == SpeakerKind.LISTENER) {
+                // the azimuth of the wall point the speaker stands off from (it sits 12 cm out along the wall normal)
+                val n = Theater.land(oldRoom, old, old.azimuthOf(xz)).wallNormal
+                val az = old.azimuthOf(if (id in s.noWall || n == null) xz else xz - n * Theater.WALL_RETREAT_M)
+                val landing = Theater.land(room, seat, az)
+                positions[id] = landing.point.at(pos.y)
+                if (landing.noWall) noWall += id else noWall -= id
+            } else {
+                val at = P2.of(seat.ear) + seat.right * old.lateralOf(xz) + seat.f * old.forwardOf(xz)
+                positions[id] = room.clampToCeiling(at.at(room.ceilingY()), Theater.CEILING_INSET_M)
+            }
+        }
+        update { evaluate(it.copy(seat = seat, positions = positions, noWall = noWall, overheadLat = Theater.overheadLat(room, seat))) }
     }
 
     private fun onTracking(lost: Boolean) {
@@ -215,6 +376,14 @@ class PlannerViewModel(
 
     /** Sit (design T1 / T11): P and f from the head at the pinch; the speakers land at their recommended positions. */
     fun sit(head: HeadPose) {
+        val st = _state.value
+        if (!(st.phase == Phase.RESEAT && st.seat != null) && st.roomSource == RoomSource.VIRTUAL && !st.vroomTouched) {
+            // the untouched virtual room is put around the place the user sits down in, front wall ahead
+            val v = st.vroom
+            val around = VirtualRoom.around(P2.of(head.position), head.level(), v?.width ?: VirtualRoom.DEFAULT_W, v?.length ?: VirtualRoom.DEFAULT_L, v?.height ?: VirtualRoom.DEFAULT_H, v?.floorY ?: 0f)
+            update { it.copy(vroom = around, seat = null) }
+            applyRoom("sit")
+        }
         val s = _state.value
         val room = s.room
         val reseat = s.phase == Phase.RESEAT && s.seat != null
@@ -243,7 +412,7 @@ class PlannerViewModel(
                 else -> null
             }
         update {
-            val base = it.copy(seat = seat, overheadLat = lat, phase = Phase.LAYOUT, selected = null, dragging = null, restore = RestoreState.NONE, snack = snack ?: if (it.snack?.kind == SnackKind.ELSEWHERE || it.snack?.kind == SnackKind.SCANNING) null else it.snack)
+            val base = it.copy(seat = seat, overheadLat = lat, phase = Phase.LAYOUT, selected = null, dragging = null, restore = RestoreState.NONE, snack = snack ?: if (it.snack?.kind == SnackKind.ELSEWHERE || it.snack?.kind == SnackKind.SCANNING || it.snack?.kind == SnackKind.VIRTUAL_ROOM) null else it.snack)
             evaluate(if (reseat) base else base.copy(positions = emptyMap(), noWall = emptySet(), inches = null))
         }
         if (snack != null) timedSnack(snack)
@@ -418,6 +587,10 @@ class PlannerViewModel(
             PlannerUiState(
                 phase = Phase.SEAT,
                 room = it.room,
+                scanned = it.scanned,
+                roomSource = it.roomSource,
+                vroom = it.vroom,
+                vroomTouched = it.vroomTouched,
                 settings = it.settings,
                 snack = SnackUi(SnackKind.CLEARED, ++snackSeq),
             )
@@ -439,11 +612,11 @@ class PlannerViewModel(
         }
     }
 
-    private fun timedSnack(snack: SnackUi) {
+    private fun timedSnack(snack: SnackUi, ms: Long = SNACK_MS) {
         timedSnackJob?.cancel()
         timedSnackJob =
             scope.launch {
-                delay(if (longSnacks) 60_000L else SNACK_MS)
+                delay(if (longSnacks) 60_000L else ms)
                 update { if (it.snack?.id == snack.id) it.copy(snack = null) else it }
             }
     }
@@ -484,6 +657,7 @@ class PlannerViewModel(
                 mode = s.mode,
                 ratio = s.ratio,
                 absorbers = s.absorbersOn,
+                room = s.vroom?.takeIf { s.roomSource == RoomSource.VIRTUAL }?.let { v -> SavedRoom(P2.of(a.pose.toLocal(v.center.at(v.floorY))), a.pose.toLocalDir(v.forward), v.width, v.length, v.height, v.floorY - a.pose.position.y) },
             )
         val ok = runCatching { store.saveLayout(layout) }.isSuccess
         if (ok) {
@@ -522,6 +696,19 @@ class PlannerViewModel(
         anchor = found
         val a = found.pose
         val ear = a.toWorld(layout.ear)
+        val r = layout.room
+        if (r != null && _state.value.roomSource != RoomSource.SCAN) {
+            // the virtual room the layout was made in, back in place
+            val fwd = a.toWorldDir(r.forward)
+            val yaw = Math.toDegrees(kotlin.math.atan2(fwd.x.toDouble(), -fwd.z.toDouble())).toFloat()
+            useVirtual("restore", VirtualRoom(P2.of(a.toWorld(r.center.at(0f))), yaw, r.width, r.length, r.height, a.position.y + r.floorY))
+        } else if (_state.value.roomSource == RoomSource.NONE) {
+            if (_state.value.scanUsable) {
+                fallbackJob?.cancel()
+                update { it.copy(roomSource = RoomSource.SCAN) }
+                applyRoom("restore")
+            } else useVirtual("restore", VirtualRoom.around(P2.of(ear), a.toWorldDir(layout.f), floorY = a.position.y + layout.floorY))
+        }
         val room = _state.value.room
         val seat =
             Seat(
@@ -573,6 +760,24 @@ class PlannerViewModel(
         }
         update { it.copy(restore = RestoreState.LOOKING) }
         startRestore()
+    }
+
+    /** Debug: forget the room and scan again from S02 (the 5 s fallback runs again). */
+    fun debugRescan() {
+        fallbackJob?.cancel()
+        restoreJob?.cancel()
+        saved = null
+        debugHoldScanning = false
+        snappedFloor = null
+        snappedCeiling = null
+        update { it.copy(phase = Phase.STARTING, seat = null, speakers = emptyList(), positions = emptyMap(), noWall = emptySet(), room = RoomModel.EMPTY, roomSource = RoomSource.NONE, vroom = null, vroomTouched = false, menuOpen = false, roomPage = false, restore = RestoreState.NONE, holdStarting = false, coach = false, rearCoach = null, selected = null) }
+        enterScanning()
+    }
+
+    /** Debug: the virtual room at this size (and touched, so sitting does not re-centre it). */
+    fun debugRoomSize(w: Float?, l: Float?, h: Float?) {
+        val v = _state.value.vroom ?: return
+        onEvent(PlannerEvent.RoomResized((w ?: v.width) - v.width, (l ?: v.length) - v.length, (h ?: v.height) - v.height))
     }
 
     /** Debug: no first-run coachmark for this layout (the QA base state). */
@@ -633,7 +838,7 @@ class PlannerViewModel(
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             val app = context.applicationContext
-            return PlannerViewModel(TpGraph.anchors, TpGraph.store(app), { TpGraph.head.blockReason() }) as T
+            return PlannerViewModel(TpGraph.anchors, TpGraph.store(app), { TpGraph.head.blockReason() }, { TpGraph.head.pose() }) as T
         }
     }
 
@@ -643,5 +848,8 @@ class PlannerViewModel(
         const val RESTORE_TIMEOUT_MS = 10_000L
         const val SNACK_MS = 5000L
         const val COACH_DELAY_MS = 1000L
+        const val SCAN_TIMEOUT_MS = 5000L
+        const val VIRTUAL_SNACK_MS = 8000L
+        const val SNAP_EPS_M = 0.02f
     }
 }

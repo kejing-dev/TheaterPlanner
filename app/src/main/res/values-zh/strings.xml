@@ -84,4 +84,20 @@
     <string name="rear_coach">可以站起来转身拖，角度仍按座位算</string>
     <string name="coach_ok">知道了</string>
     <string name="starting">准备中</string>
+    <!-- 房间（taste profile D7） -->
+    <string name="snack_virtual_room">没扫到房间 · 先用虚拟房间</string>
+    <string name="menu_room">房间</string>
+    <string name="room_back">返回</string>
+    <string name="room_src_virtual">虚拟</string>
+    <string name="room_src_scan">扫描</string>
+    <string name="room_width">宽</string>
+    <string name="room_length">长</string>
+    <string name="room_height">高</string>
+    <string name="room_move">移动</string>
+    <string name="room_turn">转向</string>
+    <string name="room_turn_left">左转 2°</string>
+    <string name="room_turn_right">右转 2°</string>
+    <string name="room_recenter">按座位摆正</string>
+    <string name="room_hint_virtual">把方框对齐你的墙。扫到地面或天花板会自动贴上。</string>
+    <string name="room_hint_scan">正在用扫描到的墙面。切到「虚拟」可自己调尺寸。</string>
 </resources>

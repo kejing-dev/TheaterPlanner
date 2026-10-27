@@ -97,4 +97,20 @@
     <string name="rear_coach">Stand up to drag; angles stay seat-based</string>
     <string name="coach_ok">Got it</string>
     <string name="starting">Getting ready</string>
+    <!-- the room (taste profile D7) -->
+    <string name="snack_virtual_room">No room scan yet · using a virtual room</string>
+    <string name="menu_room">Room</string>
+    <string name="room_back">Back</string>
+    <string name="room_src_virtual">Virtual</string>
+    <string name="room_src_scan">Scanned</string>
+    <string name="room_width">Width</string>
+    <string name="room_length">Length</string>
+    <string name="room_height">Height</string>
+    <string name="room_move">Move</string>
+    <string name="room_turn">Turn</string>
+    <string name="room_turn_left">Left 2°</string>
+    <string name="room_turn_right">Right 2°</string>
+    <string name="room_recenter">Fit to my seat</string>
+    <string name="room_hint_virtual">Line the box up with your walls. A scanned floor or ceiling snaps on by itself.</string>
+    <string name="room_hint_scan">Using the scanned walls. Switch to Virtual to set the size yourself.</string>
 </resources>
