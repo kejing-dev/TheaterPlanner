@@ -1,6 +1,6 @@
 # Theater Planner (影院规划)
 
-MR home-theater planning app for PICO OS 6 (v0.1.2). Kotlin, PICO Spatial SDK 6.1.9 (template 6.1), one Mixed Stage
+MR home-theater planning app for PICO OS 6 (v0.1.3). Kotlin, PICO Spatial SDK 6.1.9 (template 6.1), one Mixed Stage
 (Full Space only, no Shared Space version), package `io.embodit.theaterplanner`. Sit on your sofa, look at the
 TV wall and pinch: the 5.1 / 5.1.2 / 7.1.4 speakers land on your real walls and ceiling at the Dolby angles,
 with a green recommended band on each wall and a green zone on the ceiling; drag a speaker along the wall
@@ -51,7 +51,10 @@ state it writes is `panelShown` and the `readout` pill (at most 10 Hz).
 
 - Sit (S03): pinch anywhere (surface, backstop, speaker) or "就坐这儿" -> P = head, f from the gaze: a WALL hit
   within 25 degrees of the gaze puts the screen at the foot of the perpendicular; oblique -> gaze hit; no wall ->
-  the screen floats 2.5 m ahead. Reseat keeps the screen centre: f = new P -> screen centre; speakers stay.
+  the screen floats 2.5 m ahead. Reseat (v0.1.3, taste profile D9) is a sit from the head of this
+  moment like the first one (position + level heading, never the old screen, the world origin or the launch
+  pose): the screen goes onto the wall ahead; the speakers turn with the user (same azimuths / overhead offsets
+  from the new seat, `PlannerViewModel.transplant`); an untouched virtual room is re-centred around the head.
 - Listener-level speaker: wall hit from P at ear height along its azimuth (<= 8 m), retreated 0.12 m along the
   wall normal; no wall -> floating at the mean L / R distance with a dashed stand (S25). C sits 0.20 m under the
   screen's lower edge. Green in range (0.5 degree margin), orange nearer than 0.5 m, red out of range.
@@ -180,6 +183,16 @@ Lrs selected · S24 rear coachmark · S25 floating speaker with a stand (needs a
 "standing?" snackbar · S27 "not saved" snackbar · S28 menu room page · S29 nothing scanned -> virtual room snackbar
 + box (S29 turns `ignore_scan` on; `ignore_scan off` and `room scan` go back to the scanned room). `STATE Sxx ...` in the log lists every speaker's id, angle,
 lateral offset, distance and colour for the angle-table check.
+
+## Panel layout (v0.1.3, taste profile D8)
+
+Pop-ups never hide behind the console. The seat prompt (S03 / S22) is opened from the console's sofa key, so the
+user is looking at the console then: `PlannerScene.seatRest` takes the console's (and the snackbar's) angular box
+as seen from the head of this moment (`HeadFrame.view`) and moves the prompt the least angle that clears them
+(`PanelLayout.clear`: past an edge sideways or above, within 40 deg yaw / -40..+20 deg pitch), logging
+`LAYOUT seat moved yaw= pitch=`. Content placement goes through `HeadFrame.at` (position + level yaw only).
+Unit tests: `app/src/test/.../domain/HeadFrameTest.kt` (heading ignores pitch / roll, turn-round reseat puts the
+screen ahead, virtual room front wall ahead, the prompt clears console + snackbar); `gradlew testDebugUnitTest`.
 
 ## Known gaps / notes for QA
 

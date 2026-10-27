@@ -55,7 +55,7 @@
 
     <string name="seat_title">坐到看电影的位置</string>
     <string name="seat_body">看着放电视的那面墙，捏一下</string>
-    <string name="reseat_title">坐到新位置，捏一下</string>
+    <string name="reseat_title">面向电视墙坐好，捏一下</string>
     <string name="seat_here">就坐这儿</string>
     <string name="action_cancel">取消</string>
 

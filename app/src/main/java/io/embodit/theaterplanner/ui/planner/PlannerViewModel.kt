@@ -316,13 +316,13 @@ class PlannerViewModel(
     }
 
     /** The room every rule works on, from the source; a seated layout is fitted into it. */
-    private fun applyRoom(reason: String) {
+    private fun applyRoom(reason: String, refit: Boolean = true) {
         val s = _state.value
         val room = if (s.roomSource == RoomSource.VIRTUAL) s.vroom?.model ?: s.scanned else s.scanned
         if (room == s.room) return
         update { it.copy(room = room) }
         TpLog.i("ROOM use reason=$reason source=${s.roomSource} planes=${room.planes.size} ceiling=${room.hasCeiling}")
-        refit(s.room)
+        if (refit) refit(s.room)
     }
 
     /**
@@ -336,9 +336,19 @@ class PlannerViewModel(
         if (!(s.phase == Phase.LAYOUT || s.phase == Phase.RESEAT)) return
         val room = s.room
         val seat = Seat.first(old.ear, old.f, room)
+        val (positions, noWall) = transplant(old, oldRoom, seat, room, s.positions, s.noWall)
+        update { evaluate(it.copy(seat = seat, positions = positions, noWall = noWall, overheadLat = Theater.overheadLat(room, seat))) }
+    }
+
+    /**
+     * Speaker positions carried from [old] in [oldRoom] to [seat] in [room]: a listener-level speaker re-lands on
+     * the walls at its azimuth (taken at the wall point it stands 12 cm off, else every move creeps outwards), an
+     * overhead one keeps its lateral / forward offset on the new ceiling.
+     */
+    private fun transplant(old: Seat, oldRoom: RoomModel, seat: Seat, room: RoomModel, from: Map<String, Vec3>, fromNoWall: Set<String>): Pair<Map<String, Vec3>, Set<String>> {
         val positions = LinkedHashMap<String, Vec3>()
-        val noWall = s.noWall.toMutableSet()
-        for ((id, pos) in s.positions) {
+        val noWall = fromNoWall.toMutableSet()
+        for ((id, pos) in from) {
             val def = SpeakerDef.ALL.firstOrNull { it.id == id }
             if (def == null) {
                 positions[id] = pos
@@ -346,18 +356,17 @@ class PlannerViewModel(
             }
             val xz = P2.of(pos)
             if (def.kind == SpeakerKind.LISTENER) {
-                // the azimuth of the wall point the speaker stands off from (it sits 12 cm out along the wall normal)
                 val n = Theater.land(oldRoom, old, old.azimuthOf(xz)).wallNormal
-                val az = old.azimuthOf(if (id in s.noWall || n == null) xz else xz - n * Theater.WALL_RETREAT_M)
+                val az = old.azimuthOf(if (id in fromNoWall || n == null) xz else xz - n * Theater.WALL_RETREAT_M)
                 val landing = Theater.land(room, seat, az)
-                positions[id] = landing.point.at(pos.y)
+                positions[id] = landing.point.at(pos.y - old.ear.y + seat.ear.y)
                 if (landing.noWall) noWall += id else noWall -= id
             } else {
                 val at = P2.of(seat.ear) + seat.right * old.lateralOf(xz) + seat.f * old.forwardOf(xz)
                 positions[id] = room.clampToCeiling(at.at(room.ceilingY()), Theater.CEILING_INSET_M)
             }
         }
-        update { evaluate(it.copy(seat = seat, positions = positions, noWall = noWall, overheadLat = Theater.overheadLat(room, seat))) }
+        return positions to noWall
     }
 
     private fun onTracking(lost: Boolean) {
@@ -377,17 +386,21 @@ class PlannerViewModel(
     /** Sit (design T1 / T11): P and f from the head at the pinch; the speakers land at their recommended positions. */
     fun sit(head: HeadPose) {
         val st = _state.value
-        if (!(st.phase == Phase.RESEAT && st.seat != null) && st.roomSource == RoomSource.VIRTUAL && !st.vroomTouched) {
+        val reseat = st.phase == Phase.RESEAT && st.seat != null
+        val oldSeat = st.seat
+        val oldRoom = st.room
+        if (st.roomSource == RoomSource.VIRTUAL && !st.vroomTouched) {
             // the untouched virtual room is put around the place the user sits down in, front wall ahead
             val v = st.vroom
             val around = VirtualRoom.around(P2.of(head.position), head.level(), v?.width ?: VirtualRoom.DEFAULT_W, v?.length ?: VirtualRoom.DEFAULT_L, v?.height ?: VirtualRoom.DEFAULT_H, v?.floorY ?: 0f)
-            update { it.copy(vroom = around, seat = null) }
-            applyRoom("sit")
+            update { it.copy(vroom = around) }
+            applyRoom(if (reseat) "reseat" else "sit", refit = false)
         }
         val s = _state.value
         val room = s.room
-        val reseat = s.phase == Phase.RESEAT && s.seat != null
-        val seat = if (reseat) Seat.reseat(s.seat!!, head.position, room) else Seat.first(head.position, head.level(), room)
+        // sit and reseat alike come from the head of this moment, position and level heading (taste profile D9):
+        // the screen goes onto the wall ahead, never back onto the old one behind a user who turned round
+        val seat = Seat.first(head.position, head.level(), room)
         val lat = Theater.overheadLat(room, seat)
         TpLog.i(
             String.format(
@@ -413,7 +426,11 @@ class PlannerViewModel(
             }
         update {
             val base = it.copy(seat = seat, overheadLat = lat, phase = Phase.LAYOUT, selected = null, dragging = null, restore = RestoreState.NONE, snack = snack ?: if (it.snack?.kind == SnackKind.ELSEWHERE || it.snack?.kind == SnackKind.SCANNING || it.snack?.kind == SnackKind.VIRTUAL_ROOM) null else it.snack)
-            evaluate(if (reseat) base else base.copy(positions = emptyMap(), noWall = emptySet(), inches = null))
+            if (reseat && oldSeat != null) {
+                // the speakers turn with the user: same angles and offsets from the new seat
+                val (pos, nw) = transplant(oldSeat, oldRoom, seat, room, it.positions, it.noWall)
+                evaluate(base.copy(positions = pos, noWall = nw))
+            } else evaluate(base.copy(positions = emptyMap(), noWall = emptySet(), inches = null))
         }
         if (snack != null) timedSnack(snack)
         if (!reseat) {

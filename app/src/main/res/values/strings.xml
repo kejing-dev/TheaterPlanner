@@ -61,7 +61,7 @@
     <!-- seat prompt -->
     <string name="seat_title">Sit where you watch</string>
     <string name="seat_body">Look at the TV wall and pinch</string>
-    <string name="reseat_title">Move to the new seat and pinch</string>
+    <string name="reseat_title">Sit facing the TV wall and pinch</string>
     <string name="seat_here">Sit here</string>
     <string name="action_cancel">Cancel</string>
 

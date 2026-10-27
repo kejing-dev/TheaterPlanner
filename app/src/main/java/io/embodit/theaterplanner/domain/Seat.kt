@@ -56,7 +56,8 @@ data class Seat(
         const val FRONT_WALL_MAX_DEG = 25f
 
         /**
-         * First seating: pinch -> head position P, horizontal gaze g. A WALL hit along g whose normal
+         * Sitting and reseating (taste profile D9: from the head of this moment, never the old screen): pinch ->
+         * head position P, horizontal gaze g. A WALL hit along g whose normal
          * (flipped towards P) is within 25 degrees of -g puts the screen at the foot of the perpendicular
          * from P; a more oblique wall takes the gaze hit point; no wall floats the screen 2.5 m ahead.
          */
@@ -81,13 +82,6 @@ data class Seat(
                 } else P2.of(hit.point)
             val f = (center - p).normalized().let { if (it.length < 0.5f) gaze else it }
             return Seat(head, floorY, f, center, n, hit.plane, false)
-        }
-
-        /** Reseat (design `rules.reseat`): same screen centre, new P; f = new P -> screen centre. */
-        fun reseat(previous: Seat, head: Vec3, room: RoomModel): Seat {
-            val p = P2.of(head)
-            val f = (previous.screenCenter - p).normalized().let { if (it.length < 0.5f) previous.f else it }
-            return previous.copy(ear = head, floorY = room.floorY ?: previous.floorY, f = f)
         }
     }
 }

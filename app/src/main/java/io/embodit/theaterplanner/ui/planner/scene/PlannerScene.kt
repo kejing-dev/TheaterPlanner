@@ -20,10 +20,12 @@ import com.pico.spatial.ui.foundation.gesture.SpatialTapValue
 import com.pico.spatial.core.ecs.ViewCoordinateSpace
 import io.embodit.theaterplanner.domain.DragLine
 import io.embodit.theaterplanner.domain.FacePanel
+import io.embodit.theaterplanner.domain.HeadFrame
 import io.embodit.theaterplanner.domain.HeadPose
 import io.embodit.theaterplanner.domain.MoveHint
 import io.embodit.theaterplanner.domain.P2
 import io.embodit.theaterplanner.domain.PanelFacing
+import io.embodit.theaterplanner.domain.PanelLayout
 import io.embodit.theaterplanner.domain.Quat4
 import io.embodit.theaterplanner.domain.RoomModel
 import io.embodit.theaterplanner.domain.RoomSource
@@ -36,6 +38,7 @@ import io.embodit.theaterplanner.domain.SpeakerState
 import io.embodit.theaterplanner.domain.Status
 import io.embodit.theaterplanner.domain.Theater
 import io.embodit.theaterplanner.domain.Vec3
+import io.embodit.theaterplanner.domain.ViewBox
 import io.embodit.theaterplanner.domain.wrapDeg
 import io.embodit.theaterplanner.platform.TpGraph
 import io.embodit.theaterplanner.platform.TpLog
@@ -193,7 +196,7 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
 
     // panel follow
     private val consoleFollow = HorizontalFollow("console", { h -> restAt(h, -CONSOLE_RIGHT_DEG, -CONSOLE_DOWN_DEG, CONSOLE_M) }, CONSOLE_WINDOW_DEG)
-    private val seatFollow = HorizontalFollow("seat", { h -> restAt(h, 0f, -SEAT_DOWN_DEG, SEAT_M) }, 30f)
+    private val seatFollow = HorizontalFollow("seat", { h -> seatRest(h) }, 30f)
     private val snackFollow = HorizontalFollow("snack", { h -> restAt(h, 0f, gazePitchDeg(h) + SNACK_UP_DEG, SNACK_M) }, 25f)
 
     // =========================================================================================
@@ -806,14 +809,22 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
     // panels
     // =========================================================================================
 
-    /** The console's rest pose (design `panels.console.placement`): 30 degrees right, 22 down, 0.55 m, from the level heading. */
-    private fun restAt(h: HeadPose, leftDeg: Float, upDeg: Float, dist: Float): Vec3 {
-        val f = h.level()
-        val l = Math.toRadians(leftDeg.toDouble()).toFloat()
-        val u = Math.toRadians(upDeg.coerceIn(-80f, 80f).toDouble()).toFloat()
-        val left = P2(f.z, -f.x)
-        val d = (f * cos(l) + left * sin(l)).normalized()
-        return h.position + d.at(0f) * (dist * cos(u)) + Vec3(0f, dist * sin(u), 0f)
+    /** A rest pose from the head of this moment (design `panels.console.placement`; taste profile D9): [leftDeg] left of the level heading, [upDeg] above the horizon. */
+    private fun restAt(h: HeadPose, leftDeg: Float, upDeg: Float, dist: Float): Vec3 = HeadFrame.at(h, -leftDeg, upDeg, dist)
+
+    /**
+     * The seat prompt (S03 / S22): ahead of the head, 18 degrees down, unless that hides it behind the console
+     * or the snackbar (it is opened from the console's sofa key, so the user is looking at the console then;
+     * taste profile D8): then moved the least angle that clears them, usually up to eye level.
+     */
+    private fun seatRest(h: HeadPose): Vec3 {
+        val want = ViewBox(0f, -SEAT_DOWN_DEG, HeadFrame.halfAngle(PanelSizes.SEAT_W * DP_M * SEAT_SCALE / 2f, SEAT_M), HeadFrame.halfAngle(PanelSizes.SEAT_H * DP_M * SEAT_SCALE / 2f, SEAT_M))
+        val obstacles = ArrayList<ViewBox>(2)
+        rig?.get(PanelIds.CONSOLE)?.let { c -> if (c.shown) obstacles += HeadFrame.view(h, c.position, PanelSizes.CONSOLE_W * DP_M * CONSOLE_SCALE / 2f, PanelSizes.CONSOLE_H * DP_M * CONSOLE_SCALE / 2f) }
+        rig?.get(PanelIds.SNACK)?.let { c -> if (c.shown && ui.snack != null) obstacles += HeadFrame.view(h, c.position, PanelSizes.SNACK_W * DP_M * SNACK_SCALE / 2f, 56f * DP_M * SNACK_SCALE / 2f) }
+        val box = PanelLayout.clear(want, obstacles)
+        if (box != want) TpLog.i(String.format(Locale.US, "LAYOUT seat moved yaw=%.1f pitch=%.1f (clear of %d panels)", box.yaw, box.pitch, obstacles.size))
+        return HeadFrame.at(h, box.yaw, box.pitch, SEAT_M)
     }
 
     private fun gazePitchDeg(h: HeadPose): Float = Math.toDegrees(asin(h.forward.y.coerceIn(-1f, 1f).toDouble())).toFloat().coerceIn(-GAZE_PITCH_MAX_DEG, GAZE_PITCH_MAX_DEG)
