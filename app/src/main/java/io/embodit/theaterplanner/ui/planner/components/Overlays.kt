@@ -100,7 +100,11 @@ internal fun SeatPanel(state: PlannerUiState?, onSeatHere: () -> Unit, onEvent: 
 @Composable
 internal fun MoreMenu(state: PlannerUiState?, head: () -> HeadPose?, onEvent: (PlannerEvent) -> Unit) {
     Box(modifier = Modifier.size(PanelSizes.MENU_PANEL_W.dp, PanelSizes.MENU_PANEL_H.dp), contentAlignment = Alignment.BottomEnd) {
-        if (state?.roomPage == true) RoomPage(state = state, head = head, onEvent = onEvent) else MenuPage(state = state, onEvent = onEvent)
+        when {
+            state?.roomPage == true -> RoomPage(state = state, head = head, onEvent = onEvent)
+            state?.objectsPage == true -> ObjectsPage(state = state, head = head, onEvent = onEvent)
+            else -> MenuPage(state = state, onEvent = onEvent)
+        }
     }
 }
 
@@ -149,6 +153,18 @@ private fun MenuPage(state: PlannerUiState?, onEvent: (PlannerEvent) -> Unit) {
         val roomText =
             if (state.roomSource == RoomSource.SCAN || v == null) rs(R.string.menu_room) + " · " + rs(R.string.room_src_scan)
             else rs(R.string.menu_room) + " · " + String.format(java.util.Locale.US, "%.1f × %.1f × %.1f", v.width, v.length, v.height) + (if (state.unit == LengthUnit.M) " m" else "")
+        // the things in the room (taste profile D14): hide, move in front of me, off, reset
+        Button(
+            onClick = { onEvent(PlannerEvent.ObjectsPageShown(true)) },
+            modifier = Modifier.fillMaxWidth().probe("menu_objects"),
+            size = ButtonDefaults.Regular.copy(height = RowH),
+            shape = CircleShape,
+            enabled = state.seat != null,
+            colors = ButtonDefaults.buttonColors(containerColor = PicoTheme.colorScheme.fillTertiary, contentColor = ink),
+        ) {
+            Text(text = rs(R.string.menu_objects), color = ink, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Icon(painter = painterResource(R.drawable.ic_arrow), contentDescription = null, modifier = Modifier.size(18.dp), tint = ink)
+        }
         Button(
             onClick = { onEvent(PlannerEvent.RoomPageShown(true)) },
             modifier = Modifier.fillMaxWidth().probe("menu_room"),

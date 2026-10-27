@@ -30,6 +30,7 @@ import io.embodit.theaterplanner.domain.Quat4
 import io.embodit.theaterplanner.domain.RoomModel
 import io.embodit.theaterplanner.domain.RoomSource
 import io.embodit.theaterplanner.domain.ScreenMode
+import io.embodit.theaterplanner.domain.ScreenGeom
 import io.embodit.theaterplanner.domain.ScreenRules
 import io.embodit.theaterplanner.domain.Seat
 import io.embodit.theaterplanner.domain.SpeakerDef
@@ -42,6 +43,7 @@ import io.embodit.theaterplanner.domain.ViewBox
 import io.embodit.theaterplanner.domain.wrapDeg
 import io.embodit.theaterplanner.platform.TpGraph
 import io.embodit.theaterplanner.platform.TpLog
+import io.embodit.theaterplanner.ui.planner.Objects
 import io.embodit.theaterplanner.ui.planner.Page
 import io.embodit.theaterplanner.ui.planner.Phase
 import io.embodit.theaterplanner.ui.planner.PlannerEvent
@@ -470,14 +472,16 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
             return
         }
         val screenPage = state.page == Page.SCREEN
-        state.screen?.let { screenView.draw(it, state.mode, bright = screenPage) }
+        val screen = screenLive ?: state.screen
+        if (Objects.SCREEN in state.hidden || screen == null) screenView.hide() else screenView.draw(screen, state.mode, bright = screenPage)
         val p = state.projector
-        if (screenPage && state.mode == ScreenMode.PROJECTOR && p != null && state.screen != null) projectorView.draw(p, state.screen, state.room.ceilingY()) else projectorView.hide()
+        if (Objects.PROJECTOR !in state.hidden && screenPage && state.mode == ScreenMode.PROJECTOR && p != null && state.screen != null) projectorView.draw(p, state.screen, state.room.ceilingY()) else projectorView.hide()
         // bands and zones (hidden on the screen page; faint while the absorbers show)
+        val speakersHidden = Objects.SPEAKERS in state.hidden
         for (sp in state.speakers) {
             if (sp.def.kind == SpeakerKind.LISTENER) {
                 val view = bandViews[sp.id] ?: continue
-                if (screenPage) {
+                if (screenPage || speakersHidden) {
                     view.hide()
                     continue
                 }
@@ -495,7 +499,7 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
                 view.draw(pts, nrm, look)
             } else {
                 val view = zoneViews[sp.id] ?: continue
-                if (screenPage) {
+                if (screenPage || speakersHidden) {
                     view.hide()
                     continue
                 }
@@ -509,7 +513,7 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         // absorbers
         for (i in absorberViews.indices) {
             val a = state.absorbers.getOrNull(i)
-            if (a != null) absorberViews[i].draw(a) else absorberViews[i].hide()
+            if (a != null && Objects.ABSORBERS !in state.hidden) absorberViews[i].draw(a) else absorberViews[i].hide()
         }
         // assumed ceiling grid
         if (state.overheadAssumed) {
@@ -599,10 +603,14 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         val screenPage = state.page == Page.SCREEN
         if (seat != null && (state.phase == Phase.LAYOUT || state.phase == Phase.RESEAT)) {
             val ear = seat.ear
+            val speakersOn = Objects.SPEAKERS !in state.hidden
+            val head = pose.position
             for (sp in state.speakers) {
                 val v = speakerViews[sp.id] ?: continue
                 val s = stateOf(sp)
                 val pos = positionOf(sp)
+                v.show(speakersOn)
+                v.near(pos.distanceTo(head) < NEAR_M)
                 if (sp.def.kind == SpeakerKind.LISTENER) {
                     v.placeListener(pos, (ear - pos).rejectFrom(Vec3.UP), s.status, dim = screenPage, stale = stale)
                     // a floating speaker stands on a dashed support (design S25)
@@ -614,6 +622,9 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
                     v.placeOverhead(pos, s.status, dim = screenPage, stale = stale)
                 }
             }
+            // see-through when the head is in or next to the screen / projector (taste profile D14)
+            (screenLive ?: state.screen)?.let { sc -> screenView?.near(nearScreen(sc, head)) }
+            state.projector?.let { pj -> projectorView?.near(pj.center.distanceTo(head) < NEAR_M) }
             // seat mark: pole and ball only when the head is away from the seat
             val away = (P2.of(pose.position) - P2.of(ear)).length > 0.5f
             seatMark?.draw(ear, seat.floorY, showPole = away, headPos = pose.position)
@@ -826,6 +837,8 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
             for (i in 0 until PanelIds.ABS_SLOTS) add(PanelIds.abs(i))
         }
 
+    private val popupIdsForCheck = setOf(PanelIds.MENU, PanelIds.DIALOG, PanelIds.SEAT, PanelIds.SNACK)
+
     /** The console's rest (design: 30 degrees right, 22 down, 0.55 m from the level heading), moved clear of the labels in the room. */
     private fun consoleRest(h: HeadPose): Vec3 {
         val half = HeadFrame.halfAngle(PanelSizes.CONSOLE_W * DP_M * CONSOLE_SCALE / 2f, CONSOLE_M)
@@ -889,6 +902,11 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         for (a in shown) for (b in shown) {
             if (a.id >= b.id || !a.box.overlaps(b.box)) continue
             val (near, far) = if (a.dist <= b.dist) a to b else b to a
+            // a pop-up the user just opened may stand in front of a label far off in the room; never of another panel
+            if (near.id in popupIdsForCheck && far.id in labelIds) {
+                out += "LAYOUT INFO ${near.id} in front of ${far.id} (pop-up over a room label)"
+                continue
+            }
             out += "LAYOUT OVERLAP ${near.id} covers ${far.id}"
             bad++
         }
@@ -969,7 +987,7 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         val eye = pose.position
         fun k(at: Vec3) = (STRIP_K * at.distanceTo(eye)).coerceIn(0.6f, 2.4f)
         // strip above the selected speaker (below it for a ceiling speaker), readout beside a dragged one
-        val sel = (state.dragging ?: state.selected)?.let { id -> state.speakers.firstOrNull { it.id == id } }
+        val sel = if (Objects.SPEAKERS in state.hidden) null else (state.dragging ?: state.selected)?.let { id -> state.speakers.firstOrNull { it.id == id } }
         if (sel != null) {
             val pos = positionOf(sel)
             val toward = (eye - pos).rejectFrom(Vec3.UP).normalized()
@@ -991,7 +1009,7 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         }
         // the plate of the speaker the gaze rests on (within 8 degrees), not the selected one
         // not while a menu, dialog or prompt is up: nothing hovers behind a modal panel (taste profile D8)
-        val gazed = if (state.menuOpen || state.clearDialog || state.blocked) null else gazedSpeaker(state, sel?.id)
+        val gazed = if (state.menuOpen || state.clearDialog || state.blocked || Objects.SPEAKERS in state.hidden) null else gazedSpeaker(state, sel?.id)
         if (gazed != null) {
             val pos = positionOf(gazed)
             val toward = (eye - pos).rejectFrom(Vec3.UP).normalized()
@@ -1007,7 +1025,7 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         } else rig[PanelIds.SIZE_TAG]?.hide()
         // absorber plates at the lower edge of each frame
         for (i in 0 until PanelIds.ABS_SLOTS) {
-            val a = state.absorbers.getOrNull(i)
+            val a = if (Objects.ABSORBERS in state.hidden) null else state.absorbers.getOrNull(i)
             if (a == null) {
                 rig[PanelIds.abs(i)]?.hide()
                 continue
@@ -1116,9 +1134,14 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
                 val target = value.targetEntity
                 val name = runCatching { target?.getName() }.getOrNull() ?: "none"
                 val press = if (start != null) toStage(start.x, start.y, start.z) else null
-                val id = speakerOf(target)
+                val id = speakerOf(target) ?: if (target != null && screenView?.owns(target) == true && ui.page == Page.SCREEN && Objects.SCREEN !in ui.hidden) SCREEN_ID else null
                 TpLog.i("DRAG start target=$name speaker=${id ?: "-"} stage=${TpLog.pos(press)}")
                 if (id == null || press == null) return
+                if (id == SCREEN_ID) {
+                    if (!ui.dragEnabled || ui.menuOpen) return
+                    drag = Drag(id, press)
+                    return
+                }
                 if (!ui.dragEnabled || ui.menuOpen || ui.page == Page.SCREEN) {
                     TpLog.i("DRAG refused reason=${if (ui.menuOpen) "menu" else if (ui.page == Page.SCREEN) "screen-page" else "disabled"} state=${ui.designState}")
                     return
@@ -1137,14 +1160,23 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
                     val turned = DragLine.turn(dir, d.hand - d.prevHand, d.equivalent, pose.right, pose.up, pose.forward)
                     d.prevHand = d.hand
                     d.dir = turned
-                    val sp = ui.speakers.firstOrNull { it.id == d.id } ?: return
+                    // taste profile D1: the controller's own ray when there is one, else the system pointer's line from the head
+                    val ray = stick.ray()
+                    val origin = ray?.first ?: pose.position
+                    val aim = ray?.second ?: turned
+                    if (d.moves <= 1) TpLog.i("DRAG ray=${if (ray != null) "controller" else "system"} id=${d.id}")
                     val seat = ui.seat ?: return
+                    if (d.id == SCREEN_ID) {
+                        moveScreenLive(seat, origin, aim)
+                        return
+                    }
+                    val sp = ui.speakers.firstOrNull { it.id == d.id } ?: return
                     if (sp.def.kind == SpeakerKind.LISTENER) {
                         val current = positionOf(sp)
-                        val az = Theater.dragAzimuth(seat, ui.room, pose.position, turned, (P2.of(current) - P2.of(seat.ear)).length) ?: return
+                        val az = Theater.dragAzimuth(seat, ui.room, origin, aim, (P2.of(current) - P2.of(seat.ear)).length) ?: return
                         setLiveListener(sp, az, now)
                     } else {
-                        val p = Theater.dragCeiling(ui.room, pose.position, turned) ?: return
+                        val p = Theater.dragCeiling(ui.room, origin, aim) ?: return
                         setLiveOverhead(sp, p, now)
                     }
                     if (d.moves <= 3 || now - d.lastLogMs > 500) {
@@ -1175,6 +1207,10 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         val pitch = Math.toDegrees(asin(pose.forward.y.coerceIn(-1f, 1f).toDouble())).toFloat()
         d.equivalent = DragLine.equivalentDepth(to.length, pitch)
         d.prevHand = d.hand
+        if (d.id == SCREEN_ID) {
+            TpLog.i("DRAG begin id=screen")
+            return
+        }
         sink(PlannerEvent.DragStarted(d.id))
         TpLog.i("DRAG begin id=${d.id} depth=${String.format(Locale.US, "%.2f", d.equivalent)}")
     }
@@ -1182,8 +1218,47 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
     private fun endDrag(cancelled: Boolean, id: String? = null) {
         val dragged = id ?: drag?.id ?: ui.dragging ?: return
         drag = null
+        if (dragged == SCREEN_ID) {
+            val c = screenLiveCenter
+            screenLive = null
+            screenLiveCenter = null
+            if (!cancelled && c != null) sink(PlannerEvent.ScreenMoved(c)) else render(ui)
+            return
+        }
         val l = live?.takeIf { it.first == dragged }
         sink(PlannerEvent.DragEnded(dragged, if (cancelled) null else l?.second, liveNoWall))
+    }
+
+    private var screenLive: ScreenGeom? = null
+    private var screenLiveCenter: P2? = null
+
+    /** The screen follows the ray's hit on its own wall plane, sliding along the wall (taste profile D14). */
+    private fun moveScreenLive(seat: io.embodit.theaterplanner.domain.Seat, origin: Vec3, aim: Vec3) {
+        val n = seat.screenNormal.at(0f)
+        val onWall = seat.screenCenter.at(seat.ear.y)
+        val denom = aim.dot(n)
+        if (kotlin.math.abs(denom) < 1e-4f) return
+        val t = (onWall - origin).dot(n) / denom
+        if (t <= 0f || t > 12f) return
+        val hitP = origin + aim * t
+        // only along the wall: the centre stays on the wall line, within 3 m of where it was
+        val along = P2(seat.screenNormal.z, -seat.screenNormal.x)
+        val shift = (P2.of(hitP) - seat.screenCenter).dot(along).coerceIn(-3f, 3f)
+        val c = seat.screenCenter + along * shift
+        val f = (c - P2.of(seat.ear)).normalized()
+        val inches = ui.screen?.inches ?: return
+        val live = ScreenRules.geom(seat.copy(screenCenter = c, f = f), ui.room, inches)
+        screenLive = live
+        screenLiveCenter = c
+        screenView?.draw(live, ui.mode, bright = true)
+    }
+
+    /** The head is in front of the screen and within [NEAR_M] of its plane. */
+    private fun nearScreen(sc: ScreenGeom, head: Vec3): Boolean {
+        val rel = head - sc.center
+        val d = kotlin.math.abs(rel.dot(sc.normal.at(0f)))
+        if (d >= NEAR_M) return false
+        return kotlin.math.abs(rel.dot(sc.right.at(0f))) < sc.width / 2f + NEAR_M && kotlin.math.abs(rel.y) < sc.height / 2f + NEAR_M
     }
 
     /** Debug: a drag-like move of [id] to azimuth [az] (listener) or ceiling point [x], [z] (overhead), written at once. */
@@ -1261,6 +1336,7 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         /** Labels by a speaker stand this far towards the viewer, clear of the speaker, its band and the wall. */
         const val LABEL_GAP_M = 0.15f
         const val CONSOLE_YIELD_MS = 1000L
+        const val SCREEN_ID = "screen"
         const val GAZE_PITCH_MAX_DEG = 60f
         const val STRIP_K = 0.5f
         const val KEY_HOLD_MS = 600L

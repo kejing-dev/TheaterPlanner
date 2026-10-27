@@ -308,6 +308,9 @@ object ScreenRules {
 
     fun diagonalFor(viewDeg: Float, distance: Float): Float = 2f * distance * tan(Math.toRadians(viewDeg / 2.0)).toFloat() / INCH_W
 
+    /** Least distance from the ear point to the screen (taste profile D14, large object). */
+    const val SCREEN_CLEAR_M = 0.8f
+
     fun geom(seat: Seat, room: RoomModel, inches: Int): ScreenGeom {
         val w = widthOf(inches)
         val h = w * 9f / 16f
@@ -316,10 +319,12 @@ object ScreenRules {
         if (cy + h / 2f > ceilY - TOP_CLEAR_M) cy = ceilY - TOP_CLEAR_M - h / 2f
         if (cy - h / 2f < seat.floorY + BOTTOM_MIN_M) cy = seat.floorY + BOTTOM_MIN_M + h / 2f
         val n = seat.screenNormal
-        val center = (seat.screenCenter + n * OFF_WALL_M).at(cy)
+        // never in the face (taste profile D14): a seat nearer than SCREEN_CLEAR_M to the wall pushes the screen away
+        val push = max(0f, SCREEN_CLEAR_M - seat.screenDistance)
+        val center = (seat.screenCenter + n * (OFF_WALL_M - push)).at(cy)
         // right as seen from the seat: the normal points at the seat, so right = normal turned 90 degrees to its left
         val right = P2(n.z, -n.x)
-        val d = seat.screenDistance
+        val d = seat.screenDistance + push
         return ScreenGeom(inches, w, h, center, n, right, cy - h / 2f, cy + h / 2f, d, viewDeg(w, d))
     }
 

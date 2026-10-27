@@ -114,8 +114,15 @@ class PlannerViewModel(
             is PlannerEvent.SizeStepped -> if (s.consoleEnabled) stepSize(e.delta)
             PlannerEvent.UseRecommended -> if (s.consoleEnabled) changeThenSave { it.copy(inches = it.advice?.use) }
             is PlannerEvent.RatioStepped -> if (s.consoleEnabled) changeThenSave { it.copy(ratio = (it.ratio + e.delta * ProjectorRules.RATIO_STEP).coerceIn(ProjectorRules.RATIO_MIN, ProjectorRules.RATIO_MAX)) }
-            PlannerEvent.MoreClicked -> if (s.consoleEnabled) update { it.copy(menuOpen = !it.menuOpen, roomPage = false) }
-            is PlannerEvent.RoomPageShown -> if (s.menuOpen || !e.shown) update { it.copy(roomPage = e.shown) }
+            PlannerEvent.MoreClicked -> if (s.consoleEnabled) update { it.copy(menuOpen = !it.menuOpen, roomPage = false, objectsPage = false) }
+            is PlannerEvent.RoomPageShown -> if (s.menuOpen || !e.shown) update { it.copy(roomPage = e.shown, objectsPage = false) }
+            is PlannerEvent.ObjectsPageShown -> if (s.menuOpen || !e.shown) update { it.copy(objectsPage = e.shown, roomPage = false) }
+            is PlannerEvent.ObjectHidden -> {
+                update { it.copy(hidden = if (e.hidden) it.hidden + e.key else it.hidden - e.key) }
+                TpLog.i("OBJECT ${e.key} hidden=${e.hidden}")
+            }
+            is PlannerEvent.ScreenToFront -> if (s.consoleEnabled && e.head != null) screenToFront(e.head)
+            is PlannerEvent.ScreenMoved -> if (s.dragEnabled) screenMoved(e.center)
             is PlannerEvent.RoomSourceSelected -> if (s.consoleEnabled) selectSource(e.source, "menu")
             is PlannerEvent.RoomResized -> if (s.consoleEnabled) editRoom("resize") { it.resized(e.dw, e.dl, e.dh) }
             is PlannerEvent.RoomMoved ->
@@ -234,6 +241,27 @@ class PlannerViewModel(
             }
             update { evaluate(it) }
         }
+    }
+
+    // ---- objects (taste profile D14) ---------------------------------------------------------
+
+    /** "Move in front of me": the front becomes the wall ahead of the head of this moment; the ear point stays, the speakers turn along. */
+    private fun screenToFront(head: HeadPose) {
+        val s = _state.value
+        val old = s.seat ?: return
+        val seat = Seat.first(old.ear, head.level(), s.room).copy(floorY = old.floorY)
+        val (pos, nw) = transplant(old, s.room, seat, s.room, s.positions, s.noWall)
+        changeThenSave { it.copy(seat = seat, positions = pos, noWall = nw, overheadLat = Theater.overheadLat(it.room, seat), hidden = it.hidden - Objects.SCREEN) }
+        TpLog.i(String.format(Locale.US, "OBJECT screen to-front screen=(%.3f, %.3f) wall=%s", seat.screenCenter.x, seat.screenCenter.z, seat.screenWall?.label ?: "-"))
+    }
+
+    /** The screen dragged along its wall: f = P -> the new centre; the speakers stay where they are and are judged again. */
+    private fun screenMoved(center: P2) {
+        val seat = _state.value.seat ?: return
+        val f = (center - P2.of(seat.ear)).normalized()
+        if (f.length < 0.5f) return
+        changeThenSave { it.copy(seat = seat.copy(screenCenter = center, f = f)) }
+        TpLog.i(String.format(Locale.US, "OBJECT screen moved to=(%.3f, %.3f)", center.x, center.z))
     }
 
     // ---- the room: scanned or virtual (taste profile D7) ------------------------------------

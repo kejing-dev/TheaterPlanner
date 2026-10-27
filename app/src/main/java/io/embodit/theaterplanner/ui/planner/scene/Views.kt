@@ -13,6 +13,10 @@ import io.embodit.theaterplanner.domain.VirtualRoom
 import kotlin.math.atan2
 
 /** Dimensions of the basic-shape speakers (design `entities3d`). */
+/** Things in the room nearer than this to the head turn see-through (taste profile D14). */
+internal const val NEAR_M = 0.6f
+internal const val NEAR_OPACITY = 0.3f
+
 internal object SpeakerDims {
     const val W = 0.18f
     const val H = 0.30f
@@ -42,6 +46,23 @@ internal class SpeakerView(root: Entity, meshes: TpMeshes, private val m: TpMate
 
     fun owns(entity: Entity): Boolean = entity.id == hit.id || entity.id == body.entity.id || entity.id == face.entity.id
 
+    private var ghost = false
+    private var shown = true
+
+    /** Hidden from the object list (taste profile D14): not drawn, not hit. */
+    fun show(visible: Boolean) {
+        if (visible == shown) return
+        shown = visible
+        body.show(visible)
+        face.show(visible)
+        hit.enabled = visible
+    }
+
+    /** The head is within [NEAR_M] of it: see through it (taste profile D14, at most 30 %). */
+    fun near(on: Boolean) {
+        ghost = on
+    }
+
     /** Listener-level: the box stands at [center] facing [toward] (horizontal unit vector towards the ear point). */
     fun placeListener(center: Vec3, toward: Vec3, status: Status, dim: Boolean, stale: Boolean) {
         overhead = false
@@ -66,7 +87,7 @@ internal class SpeakerView(root: Entity, meshes: TpMeshes, private val m: TpMate
     private fun look(status: Status, dim: Boolean, stale: Boolean) {
         body.material(if (dim) m.speakerBodyDim else m.speakerBody)
         face.material(if (dim) m.faceDim else m.face(status, stale))
-        val o = if (dim) 0.5f else 1f
+        val o = if (ghost) NEAR_OPACITY else if (dim) 0.5f else 1f
         body.entity.setOpacity(o)
         face.entity.setOpacity(o)
     }
@@ -150,11 +171,38 @@ internal class ScreenView(root: Entity, meshes: TpMeshes, private val m: TpMater
     private val face = Part(root, meshes.cube, m.screenBlack, "screen")
     private val frame = Frame(root, meshes.band, m.frameLight, "screenFrame")
 
+    /** The grab target: dragging it moves the screen along its wall (taste profile D14). */
+    private val hit = Entity()
+    private var hitSize: Vec3? = null
+    private var ghost = false
+
+    init {
+        runCatching { hit.setName("screenHit") }
+        hit.components.set(InteractableComponent())
+        root.addChild(hit)
+    }
+
+    fun owns(entity: Entity): Boolean = entity.id == hit.id || entity.id == face.entity.id
+
+    /** The head is within [NEAR_M] of it: see through it (taste profile D14). */
+    fun near(on: Boolean) {
+        if (on == ghost) return
+        ghost = on
+        face.entity.setOpacity(if (on) NEAR_OPACITY else 1f)
+    }
+
     fun draw(s: ScreenGeom, mode: ScreenMode, bright: Boolean) {
         val n = s.normal.at(0f)
         val right = s.right.at(0f)
         val rot = Quat4.fromBasis(right, Vec3.UP, n)
         face.place(s.center, Vec3(s.width, s.height, 0.004f), rot)
+        val size = Vec3(s.width, s.height, 0.06f)
+        if (hitSize == null || hitSize!!.distanceTo(size) > 0.001f) {
+            hit.components.set(boxCollision(size))
+            hitSize = size
+        }
+        hit.setLocal(position = s.center, rotation = rot)
+        hit.enabled = true
         face.material(if (mode == ScreenMode.TV) (if (bright) m.screenBlack else m.screenBlackDim) else (if (bright) m.screenWhite else m.screenWhiteDim))
         frame.material(if (bright) m.frameLight else m.frameDim)
         val w = if (mode == ScreenMode.TV) 0.02f else 0.008f
@@ -164,6 +212,7 @@ internal class ScreenView(root: Entity, meshes: TpMeshes, private val m: TpMater
     fun hide() {
         face.show(false)
         frame.hide()
+        hit.enabled = false
     }
 }
 
@@ -173,6 +222,14 @@ internal class ProjectorView(root: Entity, meshes: TpMeshes, private val m: TpMa
     private val lens = Part(root, meshes.disc, m.lens, "projectorLens")
     private val hanger = Strip(root, meshes.band, m.hanger, "projectorHanger")
     private val cone = List(4) { Strip(root, meshes.band, m.amberSheer, "cone:$it") }
+    private var ghost = false
+
+    /** The head is within [NEAR_M] of it: see through it (taste profile D14). */
+    fun near(on: Boolean) {
+        if (on == ghost) return
+        ghost = on
+        box.entity.setOpacity(if (on) NEAR_OPACITY else 1f)
+    }
 
     fun draw(p: ProjectorGeom, s: ScreenGeom, ceilingY: Float) {
         val n = s.normal.at(0f) // towards the seat = towards the projector

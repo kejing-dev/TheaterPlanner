@@ -64,7 +64,7 @@ v0.1.0 里，音箱停在推荐位时推摇杆纹丝不动（每帧刚转一点�
 
 ### 版本
 
-- **v0.1.3**：所有弹出层（坐下面板、清除确认框、提示条）都比主面板更近、自动避开主面板和菜单，主面板也会给房间里的标签让开（24 项 UI × 3 个朝向排查全部通过）；重新坐下改成按头显当前位置和朝向来放内容，转身后再坐，屏幕和音箱都出现在新的正前方，不会跑到身后。
+- **v0.1.3**：所有弹出层（坐下面板、清除确认框、提示条）都比主面板更近、自动避开主面板和菜单，主面板也会给房间里的标签让开（24 项 UI × 3 个朝向排查全部通过）；重新坐下改成按头显当前位置和朝向来放内容，转身后再坐，屏幕和音箱都出现在新的正前方，不会跑到身后。拖动改跟手柄射线；屏幕可沿墙拖，离座位至少 0.8 m，走近屏幕 / 音箱 / 投影机会变半透明；菜单新增「房间里的物件」：屏幕移到正前方 / 隐藏，投影机、吸声板、音箱可隐藏 / 关闭 / 复位。
 - **v0.1.2**：扫不到房间也能用——5 秒内没扫到地面和墙就直接进一个 4 × 5 × 2.7 m 的虚拟房间（之前在头显上一直卡在「正在扫描」：真机只扫到地面、天花板和家具，没有墙）。菜单 → 房间 里调长宽高、平移、转向、按座位摆正，全程坐着就能做；扫到真实地面 / 天花板会自动贴上；音箱、屏幕、投影机都按这个房间算，改房间后会跟着重新落位。
 - **v0.1.1**：修好摇杆从推荐位推不动的问题（QA 第 1 轮打回的唯一一条）；推动期间不吸附、松手再判一次，并去掉了每帧 0.1° 的漂移。QA 第 2 轮在模拟器上复查通过。
 - v0.1.0：首个版本。
@@ -105,7 +105,7 @@ See the gallery above: 5.1.2 ceiling zones, dragging with the live readout, out-
 
 ### Versions
 
-- **v0.1.3**: every pop-up (sit prompt, clear confirmation, snackbars) sits nearer than the main panel and steps clear of it and the menu, and the main panel steps aside for labels in the room (24 UI items x 3 headings audited, all pass); reseating now uses the headset's current position and heading, so after turning round the screen and speakers appear ahead, never behind.
+- **v0.1.3**: every pop-up (sit prompt, clear confirmation, snackbars) sits nearer than the main panel and steps clear of it and the menu, and the main panel steps aside for labels in the room (24 UI items x 3 headings audited, all pass); reseating now uses the headset's current position and heading, so after turning round the screen and speakers appear ahead, never behind. Drags follow the controller ray; the screen can be dragged along its wall and stays at least 0.8 m from the seat; the screen, speakers and projector turn see-through when you walk into them; menu -> Objects in the room moves the screen in front of you or hides / switches off the screen, projector, absorbers and speakers.
 - **v0.1.2**: never stuck scanning. If no floor and wall are found within 5 s, a 4 x 5 x 2.7 m virtual room is used right away (on the headset the scan returned floor, ceiling and furniture but no walls, so v0.1.1 waited forever). Menu -> Room sets width / length / height, nudges and turns the box to line it up with the real walls, all from the seat; a scanned floor / ceiling snaps on by itself; speakers, screen and projector follow the room.
 - **v0.1.1**: fixes the thumbstick doing nothing on a speaker at its recommended spot (the only finding QA round 1 sent back): no snapping while the stick is pushed, one snap check on release, and no more 0.1° per-frame drift. Re-checked and passed in QA round 2 on the emulator.
 - v0.1.0: first build.

@@ -74,7 +74,7 @@ object PanelSizes {
     const val SEAT_W = 360f
     const val SEAT_H = 184f
     const val MENU_W = 300f
-    const val MENU_H = 232f
+    const val MENU_H = 288f
 
     /** The menu's pool panel: big enough for the room page (S28); the main page sits in its lower right corner. */
     const val MENU_PANEL_W = 400f

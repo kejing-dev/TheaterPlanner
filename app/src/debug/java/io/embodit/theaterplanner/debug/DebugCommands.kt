@@ -156,6 +156,12 @@ internal object DebugCommands {
                 name == "menu_exit" -> PlannerEvent.ExitClicked
                 name == "menu_room" -> PlannerEvent.RoomPageShown(true)
                 name == "room_back" -> PlannerEvent.RoomPageShown(false)
+                name == "menu_objects" -> PlannerEvent.ObjectsPageShown(true)
+                name == "objects_back" -> PlannerEvent.ObjectsPageShown(false)
+                name == "obj_screen_front" -> PlannerEvent.ScreenToFront(Probe.host?.scene()?.headPose())
+                name == "obj_absorbers_off" -> PlannerEvent.AbsorbersToggled(false)
+                name == "obj_speakers_reset" -> PlannerEvent.ResetAll
+                name.startsWith("obj_") && name.endsWith("_hide") -> name.removePrefix("obj_").removeSuffix("_hide").let { k -> PlannerEvent.ObjectHidden(k, k !in vm.state.value.hidden) }
                 name == "room_virtual" -> PlannerEvent.RoomSourceSelected(RoomSource.VIRTUAL)
                 name == "room_scan" -> PlannerEvent.RoomSourceSelected(RoomSource.SCAN)
                 name.startsWith("room_") && (name.endsWith("_minus") || name.endsWith("_plus")) -> {
@@ -215,7 +221,7 @@ internal object DebugCommands {
         vm.debugHoldScanning = false
         vm.longSnacks = true
         scene.debugDragCancel()
-        vm.debugSet { it.copy(menuOpen = false, clearDialog = false, blocked = false, selected = null, dragging = null, coach = false, rearCoach = null, absorbersOn = false, page = Page.SPEAKERS, mode = ScreenMode.TV, inches = null, ratio = 1.2f, config = Config.C51, restore = RestoreState.NONE, snack = null, unsaved = false, holdStarting = false, trackingLost = false) }
+        vm.debugSet { it.copy(hidden = emptySet(), objectsPage = false, roomPage = false, menuOpen = false, clearDialog = false, blocked = false, selected = null, dragging = null, coach = false, rearCoach = null, absorbersOn = false, page = Page.SPEAKERS, mode = ScreenMode.TV, inches = null, ratio = 1.2f, config = Config.C51, restore = RestoreState.NONE, snack = null, unsaved = false, holdStarting = false, trackingLost = false) }
         val s = vm.state.value
         if (s.seat == null || s.phase != Phase.LAYOUT || nums.size >= 3 || floats.containsKey("x")) {
             if (s.phase == Phase.STARTING) vm.debugLeaveStarting()
@@ -395,6 +401,14 @@ internal object DebugCommands {
                 later(300) {
                     vm.onEvent(PlannerEvent.MoreClicked)
                     vm.onEvent(PlannerEvent.RoomPageShown(true))
+                }
+            }
+            "S30" -> {
+                base(vm, scene, nums, floats)
+                vm.onEvent(PlannerEvent.AbsorbersToggled(true))
+                later(300) {
+                    vm.onEvent(PlannerEvent.MoreClicked)
+                    vm.onEvent(PlannerEvent.ObjectsPageShown(true))
                 }
             }
             "S29" -> {

@@ -128,4 +128,16 @@ class HeadFrameTest {
         val want = ViewBox(0f, -18f, 9.2f, 4.7f)
         assertEquals(want, PanelLayout.clear(want, emptyList()))
     }
+
+    /** Taste profile D14: a seat 0.5 m from the wall does not get the screen in its face. */
+    @Test
+    fun screenKeepsItsDistance() {
+        val room = VirtualRoom.around(P2(0f, 0f), P2(0f, -1f)).model
+        val h = head(0f, 1.1f, -2.5f, 0f)
+        val seat = Seat.first(h.position, h.level(), room)
+        close(0.5f, seat.screenDistance, 0.01f)
+        val g = ScreenRules.geom(seat, room, 55)
+        assertTrue(g.distance >= ScreenRules.SCREEN_CLEAR_M - 1e-3f)
+        assertTrue((P2.of(h.position) - P2(g.center.x, g.center.z)).length >= ScreenRules.SCREEN_CLEAR_M - 0.02f)
+    }
 }

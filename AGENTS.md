@@ -202,6 +202,22 @@ lateral offset, distance and colour for the angle-table check.
   Report: `../spatial-app-factory/apps/theater-planner/build/ui-audit.md`.
 - Unit tests: `app/src/test/.../domain/HeadFrameTest.kt`; `gradlew testDebugUnitTest`.
 
+## Objects, clearance, controller ray (v0.1.3, taste profile D1 / D14 / D15)
+
+- Drags follow the controller's own ray when a controller is tracked (`ControllerStick.ray()`: pose position and
+  -Z of the controller whose trigger was touched last): ray x walls for listener-level speakers, ray x ceiling for
+  overhead ones, ray x the screen's wall plane for the screen. Without a controller (hands, emulator eye mode) the
+  system pointer's line from the head (`DragLine`) is the fallback. Log `DRAG ray=controller|system`.
+- The screen is dragged along its wall on the Screen page (grab target `screenHit`); release writes
+  `ScreenMoved` (f = P -> new centre, speakers stay and are judged again).
+- Clearance: the screen keeps `ScreenRules.SCREEN_CLEAR_M` 0.8 m from the ear point (pushed along its normal);
+  speakers, screen and projector turn 30 % see-through while the head is within `NEAR_M` 0.6 m (per frame).
+  Speakers are not pushed off their walls: where they stand is the content (the < 0.5 m orange status stays).
+- Menu -> Objects in the room (S30): screen (in front of me = onto the wall ahead of the head of this moment,
+  ear point kept, speakers turn along; hide), projector (hide), absorbers (off / hide), speakers (reset / hide).
+  Projector and absorbers sit where the rules put them (throw distance, first reflections): hide / off, no drag.
+- Sound: `PlannerEffect.Feedback` is still never emitted, the app is silent; wiring it needs the console mute first.
+
 ## Known gaps / notes for QA
 
 - The seat prompt's blank glass does not count as a pinch (only "就坐这儿" and pinches in the room do): a press on

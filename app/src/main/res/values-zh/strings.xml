@@ -100,4 +100,17 @@
     <string name="room_recenter">按座位摆正</string>
     <string name="room_hint_virtual">把方框对齐你的墙。扫到地面或天花板会自动贴上。</string>
     <string name="room_hint_scan">正在用扫描到的墙面。切到「虚拟」可自己调尺寸。</string>
+    <!-- 物件（taste profile D14） -->
+    <string name="menu_objects">房间里的物件</string>
+    <string name="obj_tv">电视</string>
+    <string name="obj_projection_screen">投影幕</string>
+    <string name="obj_projector">投影机</string>
+    <string name="obj_absorbers">吸声板（%1$d）</string>
+    <string name="obj_speakers">音箱（%1$d）</string>
+    <string name="obj_to_front">移到正前方</string>
+    <string name="obj_hide">隐藏</string>
+    <string name="obj_show">显示</string>
+    <string name="obj_off">关闭</string>
+    <string name="obj_reset">复位</string>
+    <string name="obj_hint">在「屏幕」页可沿墙拖动屏幕；投影机和吸声板的位置按规则算出，可隐藏或关闭。</string>
 </resources>

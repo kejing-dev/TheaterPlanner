@@ -113,4 +113,17 @@
     <string name="room_recenter">Fit to my seat</string>
     <string name="room_hint_virtual">Line the box up with your walls. A scanned floor or ceiling snaps on by itself.</string>
     <string name="room_hint_scan">Using the scanned walls. Switch to Virtual to set the size yourself.</string>
+    <!-- objects (taste profile D14) -->
+    <string name="menu_objects">Objects in the room</string>
+    <string name="obj_tv">TV</string>
+    <string name="obj_projection_screen">Projection screen</string>
+    <string name="obj_projector">Projector</string>
+    <string name="obj_absorbers">Absorbers (%1$d)</string>
+    <string name="obj_speakers">Speakers (%1$d)</string>
+    <string name="obj_to_front">In front of me</string>
+    <string name="obj_hide">Hide</string>
+    <string name="obj_show">Show</string>
+    <string name="obj_off">Off</string>
+    <string name="obj_reset">Reset</string>
+    <string name="obj_hint">Drag the screen along its wall on the Screen page. The projector and absorbers sit where the rules put them.</string>
 </resources>

@@ -19,6 +19,14 @@ import io.embodit.theaterplanner.domain.Status
 import io.embodit.theaterplanner.domain.Vec3
 import io.embodit.theaterplanner.domain.VirtualRoom
 
+/** What the object list can hide (taste profile D14). */
+object Objects {
+    const val SCREEN = "screen"
+    const val PROJECTOR = "projector"
+    const val ABSORBERS = "absorbers"
+    const val SPEAKERS = "speakers"
+}
+
 enum class Phase { STARTING, SCANNING, SEAT, LAYOUT, RESEAT, UNAVAILABLE }
 
 enum class Page { SPEAKERS, SCREEN }
@@ -71,6 +79,10 @@ data class PlannerUiState(
     val vroomTouched: Boolean = false,
     /** The menu shows its room page (S28). */
     val roomPage: Boolean = false,
+    /** The menu shows its object list (S30, taste profile D14). */
+    val objectsPage: Boolean = false,
+    /** Objects hidden from the list: [Objects] keys. */
+    val hidden: Set<String> = emptySet(),
     val seat: Seat? = null,
     val config: Config = Config.C51,
     val page: Page = Page.SPEAKERS,
@@ -178,6 +190,7 @@ data class PlannerUiState(
                 snack?.kind == SnackKind.UNSAVED -> "S27"
                 snack?.kind == SnackKind.STANDING || snack?.kind == SnackKind.TOO_LOW -> "S26"
                 restore == RestoreState.RESTORED && snack?.kind == SnackKind.RESTORED -> "S16"
+                menuOpen && objectsPage -> "S30"
                 menuOpen && roomPage -> "S28"
                 menuOpen -> "S15"
                 rearCoach != null -> "S24"
@@ -281,6 +294,18 @@ sealed interface PlannerEvent {
 
     /** Virtual room: put it back around the seat (or the head) at the current size. */
     data class RoomRecentered(val head: HeadPose?) : PlannerEvent
+
+    /** Menu: open / close the object list. */
+    data class ObjectsPageShown(val shown: Boolean) : PlannerEvent
+
+    /** Object list: hide or show one kind of object ([Objects] key). */
+    data class ObjectHidden(val key: String, val hidden: Boolean) : PlannerEvent
+
+    /** Object list "move in front of me": the screen onto the wall ahead of the head of this moment, the ear point kept. */
+    data class ScreenToFront(val head: HeadPose?) : PlannerEvent
+
+    /** The screen was dragged along its wall to [center]. */
+    data class ScreenMoved(val center: io.embodit.theaterplanner.domain.P2) : PlannerEvent
 
     data object RearCoachDismissed : PlannerEvent
 }

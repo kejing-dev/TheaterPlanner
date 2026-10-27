@@ -26,7 +26,7 @@ shot() { # state name [PRE]
 setup() { # fresh virtual room around the head, seated with the head pose
   cmd snack long; cmd ignore_scan on; cmd rescan; sleep 8; cmd seat; sleep 2; cmd coach_reset; sleep 0.5
 }
-STATES="${STATES:-S02 S03 S29 S04 S07 S08 S11 S12 S15 S28 S16 S17 S18 S19 S20 S21 S22 S24 S26 S27}"
+STATES="${STATES:-S02 S03 S29 S04 S07 S08 S11 S12 S15 S28 S16 S17 S18 S19 S20 S21 S22 S24 S26 S27 S30}"
 turned=${START:-0}
 for hdg in "${@:-0 90 180}"; do
   for h in $hdg; do
