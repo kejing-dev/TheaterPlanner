@@ -195,9 +195,10 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
     private var awaitCommit: Pair<String, Long>? = null
 
     // panel follow
-    private val consoleFollow = HorizontalFollow("console", { h -> restAt(h, -CONSOLE_RIGHT_DEG, -CONSOLE_DOWN_DEG, CONSOLE_M) }, CONSOLE_WINDOW_DEG)
-    private val seatFollow = HorizontalFollow("seat", { h -> seatRest(h) }, 30f)
-    private val snackFollow = HorizontalFollow("snack", { h -> restAt(h, 0f, gazePitchDeg(h) + SNACK_UP_DEG, SNACK_M) }, 25f)
+    private val consoleFollow = HorizontalFollow("console", { h -> consoleRest(h) }, CONSOLE_WINDOW_DEG)
+    private var consoleYieldMs = 0L
+    private val seatFollow = HorizontalFollow("seat", { h -> popupRest(h, PanelIds.SEAT, -SEAT_DOWN_DEG, listOf(PanelIds.CONSOLE, PanelIds.MENU, PanelIds.DIALOG)) }, 30f)
+    private val snackFollow = HorizontalFollow("snack", { h -> popupRest(h, PanelIds.SNACK, gazePitchDeg(h) + SNACK_UP_DEG, listOf(PanelIds.CONSOLE, PanelIds.MENU, PanelIds.DIALOG, PanelIds.SEAT)) }, 25f)
 
     // =========================================================================================
     // lifecycle
@@ -400,6 +401,10 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         ui = state
         val root = stageRoot ?: return
         val rig = rig ?: return
+        // sitting / reseating re-parks the console in front of the head of this moment (taste profile D9)
+        if (hasHead && state.seat != null && state.seat != before.seat && state.phase == Phase.LAYOUT && (before.phase == Phase.SEAT || before.phase == Phase.RESEAT)) {
+            consoleFollow.slideNow(pose, SystemClock.elapsedRealtime())
+        }
         if (!built) {
             rig[PanelIds.CONSOLE]?.show()
             return
@@ -528,9 +533,11 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         val dialogOn = state.clearDialog || state.blocked
         val dialog = rig[PanelIds.DIALOG]
         if (dialogOn && dialog?.shown != true && hasHead) {
-            dialog?.show(restAt(pose, 0f, gazePitchDeg(pose), DIALOG_M) + Vec3(0f, -0.05f, 0f))
+            val k = popupScale(PanelIds.DIALOG)
+            dialog?.show(popupRest(pose, PanelIds.DIALOG, gazePitchDeg(pose) - 3f, listOf(PanelIds.CONSOLE, PanelIds.MENU)), k, k)
         } else if (!dialogOn) dialog?.hide()
-        if (state.snack != null) rig[PanelIds.SNACK]?.show() else {
+        // the snackbar is shown by its follow in placePanels (at a clear spot), never at a stale one here
+        if (state.snack == null) {
             rig[PanelIds.SNACK]?.hide()
             snackFollow.reset()
         }
@@ -812,19 +819,109 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
     /** A rest pose from the head of this moment (design `panels.console.placement`; taste profile D9): [leftDeg] left of the level heading, [upDeg] above the horizon. */
     private fun restAt(h: HeadPose, leftDeg: Float, upDeg: Float, dist: Float): Vec3 = HeadFrame.at(h, -leftDeg, upDeg, dist)
 
+    private val labelIds: List<String> =
+        buildList {
+            add(PanelIds.STRIP); add(PanelIds.READOUT); add(PanelIds.SIZE_TAG); add(PanelIds.COACH)
+            for (i in 0 until PanelIds.TAG_SLOTS) add(PanelIds.tag(i))
+            for (i in 0 until PanelIds.ABS_SLOTS) add(PanelIds.abs(i))
+        }
+
+    /** The console's rest (design: 30 degrees right, 22 down, 0.55 m from the level heading), moved clear of the labels in the room. */
+    private fun consoleRest(h: HeadPose): Vec3 {
+        val half = HeadFrame.halfAngle(PanelSizes.CONSOLE_W * DP_M * CONSOLE_SCALE / 2f, CONSOLE_M)
+        val want = ViewBox(CONSOLE_RIGHT_DEG, -CONSOLE_DOWN_DEG, half, HeadFrame.halfAngle(PanelSizes.CONSOLE_H * DP_M * CONSOLE_SCALE / 2f, CONSOLE_M))
+        val box = PanelLayout.clear(want, labelIds.mapNotNull { viewOf(it, h) }, margin = 1.5f)
+        return HeadFrame.at(h, box.yaw, box.pitch, CONSOLE_M)
+    }
+
+    /** Designed size (dp), scale and distance of each pop-up: placed nearer, its scale keeps the designed angular size. */
+    private class Popup(val wDp: Float, val hDp: Float, val scale: Float, val dist: Float) {
+        val k: Float
+            get() = scale * POPUP_M / dist
+    }
+
+    private val popups =
+        mapOf(
+            PanelIds.SEAT to Popup(PanelSizes.SEAT_W, PanelSizes.SEAT_H, SEAT_SCALE, SEAT_M),
+            PanelIds.SNACK to Popup(PanelSizes.SNACK_W, PanelSizes.SNACK_H, SNACK_SCALE, SNACK_M),
+            PanelIds.DIALOG to Popup(PanelSizes.DIALOG_W, PanelSizes.DIALOG_H, DIALOG_SCALE, DIALOG_M),
+        )
+
+    private fun popupScale(id: String): Float = popups[id]?.k ?: 1f
+
+    /** A shown panel as seen from [h] (its real size and scale), null when hidden. */
+    private fun viewOf(id: String, h: HeadPose): ViewBox? {
+        val slot = rig?.get(id) ?: return null
+        if (!slot.shown) return null
+        return HeadFrame.view(h, slot.position, slot.widthDp * DP_M * slot.scaleX / 2f, slot.heightDp * DP_M * slot.scaleY / 2f)
+    }
+
     /**
-     * The seat prompt (S03 / S22): ahead of the head, 18 degrees down, unless that hides it behind the console
-     * or the snackbar (it is opened from the console's sofa key, so the user is looking at the console then;
-     * taste profile D8): then moved the least angle that clears them, usually up to eye level.
+     * Where a pop-up goes (taste profile D8 / D9): from the head of this moment, [pitchDeg] above the horizon,
+     * nearer than the console ([POPUP_M]), facing the user, moved the least angle that clears the panels in
+     * [avoid] (resident console and menu first, then higher-priority pop-ups). The seat prompt is opened from
+     * the console's sofa key and the clear dialog from the menu, so the user is looking at those panels then.
      */
-    private fun seatRest(h: HeadPose): Vec3 {
-        val want = ViewBox(0f, -SEAT_DOWN_DEG, HeadFrame.halfAngle(PanelSizes.SEAT_W * DP_M * SEAT_SCALE / 2f, SEAT_M), HeadFrame.halfAngle(PanelSizes.SEAT_H * DP_M * SEAT_SCALE / 2f, SEAT_M))
-        val obstacles = ArrayList<ViewBox>(2)
-        rig?.get(PanelIds.CONSOLE)?.let { c -> if (c.shown) obstacles += HeadFrame.view(h, c.position, PanelSizes.CONSOLE_W * DP_M * CONSOLE_SCALE / 2f, PanelSizes.CONSOLE_H * DP_M * CONSOLE_SCALE / 2f) }
-        rig?.get(PanelIds.SNACK)?.let { c -> if (c.shown && ui.snack != null) obstacles += HeadFrame.view(h, c.position, PanelSizes.SNACK_W * DP_M * SNACK_SCALE / 2f, 56f * DP_M * SNACK_SCALE / 2f) }
+    private fun popupRest(h: HeadPose, id: String, pitchDeg: Float, avoid: List<String>): Vec3 {
+        val p = popups.getValue(id)
+        val k = p.k
+        val want = ViewBox(0f, pitchDeg, HeadFrame.halfAngle(p.wDp * DP_M * k / 2f, POPUP_M), HeadFrame.halfAngle(p.hDp * DP_M * k / 2f, POPUP_M))
+        val obstacles = avoid.mapNotNull { viewOf(it, h) }
         val box = PanelLayout.clear(want, obstacles)
-        if (box != want) TpLog.i(String.format(Locale.US, "LAYOUT seat moved yaw=%.1f pitch=%.1f (clear of %d panels)", box.yaw, box.pitch, obstacles.size))
-        return HeadFrame.at(h, box.yaw, box.pitch, SEAT_M)
+        if (box != want) TpLog.i(String.format(Locale.US, "LAYOUT %s moved yaw=%.1f pitch=%.1f (clear of %d panels)", id, box.yaw, box.pitch, obstacles.size))
+        return HeadFrame.at(h, box.yaw, box.pitch, POPUP_M)
+    }
+
+    /**
+     * Layout check for QA (taste profile D8): every shown panel seen from the head, then each pair where the
+     * nearer one covers part of the farther one, each panel out of comfortable view, and each panel a nearer
+     * speaker or the screen covers.
+     */
+    fun layoutLines(): List<String> {
+        val rig = rig ?: return listOf("LAYOUT no rig")
+        if (!hasHead) return listOf("LAYOUT no head")
+        val h = pose
+        class V(val id: String, val box: ViewBox, val dist: Float)
+        val shown = rig.all.filter { it.shown && panelShown[it.id] != false }.map { V(it.id, viewOf(it.id, h)!!, it.position.distanceTo(h.position)) }
+        val out = ArrayList<String>()
+        for (v in shown) out += String.format(Locale.US, "LAYOUT panel=%s yaw=%.1f pitch=%.1f half=%.1fx%.1f dist=%.2f", v.id, v.box.yaw, v.box.pitch, v.box.halfYaw, v.box.halfPitch, v.dist)
+        var bad = 0
+        for (a in shown) for (b in shown) {
+            if (a.id >= b.id || !a.box.overlaps(b.box)) continue
+            val (near, far) = if (a.dist <= b.dist) a to b else b to a
+            out += "LAYOUT OVERLAP ${near.id} covers ${far.id}"
+            bad++
+        }
+        for (v in shown) if (kotlin.math.abs(v.box.yaw) > 50f || v.box.pitch !in -50f..40f) out += "LAYOUT OFFVIEW ${v.id} (turn to see it)"
+        val things = ArrayList<Pair<String, Pair<Vec3, Vec3>>>()
+        for (sp in ui.speakers) things += sp.id to (positionOf(sp) to Vec3(SpeakerDims.W / 2f, SpeakerDims.H / 2f, 0f))
+        for (v in shown) {
+            // a speaker box whose front is nearer than the panel, across it
+            for ((name, t) in things) {
+                val d = t.first.distanceTo(h.position) - SpeakerDims.D / 2f
+                if (d >= v.dist) continue
+                if (HeadFrame.view(h, t.first, t.second.x, t.second.y).overlaps(v.box)) {
+                    out += "LAYOUT OCCLUDED ${v.id} behind $name"
+                    bad++
+                }
+            }
+            // the screen: the ray to the panel's centre meets the screen rectangle before the panel
+            val sc = ui.screen ?: continue
+            val slot = rig[v.id] ?: continue
+            val dir = (slot.position - h.position).normalized()
+            val n = sc.normal.at(0f)
+            val denom = dir.dot(n)
+            if (kotlin.math.abs(denom) < 1e-4f) continue
+            val t = (sc.center - h.position).dot(n) / denom
+            if (t <= 0f || t >= v.dist - 0.005f) continue
+            val hitP = h.position + dir * t - sc.center
+            if (kotlin.math.abs(hitP.dot(sc.right.at(0f))) <= sc.width / 2f && kotlin.math.abs(hitP.y) <= sc.height / 2f) {
+                out += "LAYOUT OCCLUDED ${v.id} behind screen"
+                bad++
+            }
+        }
+        out += "LAYOUT result panels=${shown.size} problems=$bad"
+        return out
     }
 
     private fun gazePitchDeg(h: HeadPose): Float = Math.toDegrees(asin(h.forward.y.coerceIn(-1f, 1f).toDouble())).toFloat().coerceIn(-GAZE_PITCH_MAX_DEG, GAZE_PITCH_MAX_DEG)
@@ -834,6 +931,16 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         val state = ui
         val console = rig[PanelIds.CONSOLE] ?: return
         val hold = state.menuOpen || state.clearDialog || state.blocked || now - lastConsolePressMs < KEY_HOLD_MS
+        // the console yields (taste profile D8): when it would cover a label in the room, it slides to a clear rest
+        if (!hold && now - consoleYieldMs > CONSOLE_YIELD_MS && console.shown) {
+            val cv = viewOf(PanelIds.CONSOLE, pose)
+            val hit = cv?.let { c -> labelIds.firstOrNull { id -> viewOf(id, pose)?.overlaps(c) == true } }
+            if (hit != null) {
+                consoleYieldMs = now
+                TpLog.i("LAYOUT console yields to $hit")
+                consoleFollow.slideNow(pose, now)
+            }
+        }
         consoleFollow.step(pose, now, hold)?.let { console.moveTo(it) }
         val facing = FacePanel.facing(console.position, pose.position, null)
         val cw = PanelSizes.CONSOLE_W * DP_M * CONSOLE_SCALE
@@ -843,8 +950,8 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
             val mh = PanelSizes.MENU_PANEL_H * DP_M * CONSOLE_SCALE
             rig[PanelIds.MENU]?.moveTo(console.position + facing.up * (ch / 2f + mh / 2f + 0.008f) + facing.right * (cw / 2f - mw / 2f) + facing.normal * 0.01f)
         }
-        if (state.phase == Phase.SEAT || state.phase == Phase.RESEAT) seatFollow.step(pose, now, hold = false)?.let { rig[PanelIds.SEAT]?.show(it) }
-        if (state.snack != null) snackFollow.step(pose, now, hold = false)?.let { rig[PanelIds.SNACK]?.show(it) }
+        if (state.phase == Phase.SEAT || state.phase == Phase.RESEAT) seatFollow.step(pose, now, hold = false)?.let { rig[PanelIds.SEAT]?.show(it, popupScale(PanelIds.SEAT), popupScale(PanelIds.SEAT)) }
+        if (state.snack != null) snackFollow.step(pose, now, hold = false)?.let { rig[PanelIds.SNACK]?.show(it, popupScale(PanelIds.SNACK), popupScale(PanelIds.SNACK)) }
         placeSpeakerPanels(state, facing)
     }
 
@@ -869,23 +976,27 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
             val overhead = sel.def.kind == SpeakerKind.OVERHEAD
             val kk = k(pos)
             val stripH = PanelSizes.STRIP_H * DP_M * kk
-            val stripAt = if (overhead) pos + toward * 0.18f - Vec3(0f, 0.18f + stripH / 2f, 0f) else pos + Vec3(0f, SpeakerDims.H / 2f + 0.18f + stripH / 2f, 0f)
+            val stripAt = if (overhead) pos + toward * 0.18f - Vec3(0f, 0.18f + stripH / 2f, 0f) else pos + toward * LABEL_GAP_M + Vec3(0f, SpeakerDims.H / 2f + 0.18f + stripH / 2f, 0f)
             val stripOn = state.dragging == null && turn == null && !state.trackingLost && !state.blocked
             if (stripOn) rig[PanelIds.STRIP]?.show(stripAt, kk, kk) else rig[PanelIds.STRIP]?.hide()
-            if (state.dragging != null || turn != null) rig[PanelIds.READOUT]?.show(pos + toward * 0.10f + Vec3(0f, if (overhead) -0.12f else 0.05f, 0f), kk, kk) else rig[PanelIds.READOUT]?.hide()
-            rig[PanelIds.tag(0)]?.show(if (overhead) pos + toward * 0.05f - Vec3(0f, 0.08f, 0f) else pos + Vec3(0f, SpeakerDims.H / 2f + 0.06f, 0f), kk, kk)
+            // the readout stands beside the speaker (its right as the user sees it), not over its face
+            val side = Vec3.UP.cross(toward).normalized()
+            val readoutAt = pos + toward * LABEL_GAP_M - side * (SpeakerDims.W / 2f + PanelSizes.READOUT_W * DP_M * kk / 2f + 0.04f) + Vec3(0f, if (overhead) -0.12f else 0.05f, 0f)
+            if (state.dragging != null || turn != null) rig[PanelIds.READOUT]?.show(readoutAt, kk, kk) else rig[PanelIds.READOUT]?.hide()
+            rig[PanelIds.tag(0)]?.show(if (overhead) pos + toward * 0.05f - Vec3(0f, 0.08f, 0f) else pos + toward * (LABEL_GAP_M / 2f) + Vec3(0f, SpeakerDims.H / 2f + 0.06f, 0f), kk, kk)
         } else {
             rig[PanelIds.STRIP]?.hide()
             rig[PanelIds.READOUT]?.hide()
             rig[PanelIds.tag(0)]?.hide()
         }
         // the plate of the speaker the gaze rests on (within 8 degrees), not the selected one
-        val gazed = gazedSpeaker(state, sel?.id)
+        // not while a menu, dialog or prompt is up: nothing hovers behind a modal panel (taste profile D8)
+        val gazed = if (state.menuOpen || state.clearDialog || state.blocked) null else gazedSpeaker(state, sel?.id)
         if (gazed != null) {
             val pos = positionOf(gazed)
             val toward = (eye - pos).rejectFrom(Vec3.UP).normalized()
             val kk = k(pos)
-            rig[PanelIds.tag(1)]?.show(if (gazed.def.kind == SpeakerKind.OVERHEAD) pos + toward * 0.05f - Vec3(0f, 0.08f, 0f) else pos + Vec3(0f, SpeakerDims.H / 2f + 0.06f, 0f), kk, kk)
+            rig[PanelIds.tag(1)]?.show(if (gazed.def.kind == SpeakerKind.OVERHEAD) pos + toward * 0.05f - Vec3(0f, 0.08f, 0f) else pos + toward * (LABEL_GAP_M / 2f) + Vec3(0f, SpeakerDims.H / 2f + 0.06f, 0f), kk, kk)
         } else rig[PanelIds.tag(1)]?.hide()
         // size plate at the screen's lower left corner (screen page)
         val screen = state.screen
@@ -1143,6 +1254,13 @@ class PlannerScene(private val sink: (PlannerEvent) -> Unit) {
         const val SNACK_UP_DEG = 18f
         const val SNACK_M = 0.9f
         const val DIALOG_M = 0.9f
+
+        /** Pop-ups (seat prompt, dialog, snackbar) sit nearer than the console (taste profile D8). */
+        const val POPUP_M = 0.48f
+
+        /** Labels by a speaker stand this far towards the viewer, clear of the speaker, its band and the wall. */
+        const val LABEL_GAP_M = 0.15f
+        const val CONSOLE_YIELD_MS = 1000L
         const val GAZE_PITCH_MAX_DEG = 60f
         const val STRIP_K = 0.5f
         const val KEY_HOLD_MS = 600L
@@ -1167,6 +1285,18 @@ internal class HorizontalFollow(private val name: String, private val rest: (Hea
     private var slideStartMs = NEVER
     private var outSinceMs = NEVER
     private var lastWritten: Vec3? = null
+
+    /** Slides to the rest of this moment now (sit / reseat, or yielding to a label); no-op when already there. */
+    fun slideNow(head: HeadPose, nowMs: Long) {
+        val current = position ?: return
+        val target = rest(head)
+        if (target.distanceTo(current) < 0.01f) return
+        from = current
+        to = target
+        slideStartMs = nowMs
+        outSinceMs = NEVER
+        TpLog.i("FOLLOW $name slide-now to=${TpLog.pos(to)}")
+    }
 
     fun reset() {
         at = null

@@ -184,15 +184,23 @@ Lrs selected · S24 rear coachmark · S25 floating speaker with a stand (needs a
 + box (S29 turns `ignore_scan` on; `ignore_scan off` and `room scan` go back to the scanned room). `STATE Sxx ...` in the log lists every speaker's id, angle,
 lateral offset, distance and colour for the angle-table check.
 
-## Panel layout (v0.1.3, taste profile D8)
+## Panel layout (v0.1.3, taste profile D8 / D9)
 
-Pop-ups never hide behind the console. The seat prompt (S03 / S22) is opened from the console's sofa key, so the
-user is looking at the console then: `PlannerScene.seatRest` takes the console's (and the snackbar's) angular box
-as seen from the head of this moment (`HeadFrame.view`) and moves the prompt the least angle that clears them
-(`PanelLayout.clear`: past an edge sideways or above, within 40 deg yaw / -40..+20 deg pitch), logging
-`LAYOUT seat moved yaw= pitch=`. Content placement goes through `HeadFrame.at` (position + level yaw only).
-Unit tests: `app/src/test/.../domain/HeadFrameTest.kt` (heading ignores pitch / roll, turn-round reseat puts the
-screen ahead, virtual room front wall ahead, the prompt clears console + snackbar); `gradlew testDebugUnitTest`.
+- Everything is placed from the head of this moment, position + level heading only (`HeadFrame.at`).
+- Pop-ups (seat prompt, dialog, snackbar) sit at `POPUP_M` 0.48 m, nearer than the 0.55 m console, scaled to keep
+  their designed angular size, facing the user, and moved the least angle that clears the console, the menu and
+  higher-priority pop-ups (`popupRest` -> `PanelLayout.clear`; priority dialog > seat prompt > snackbar). The seat
+  prompt is opened from the console's sofa key and Clear all from the menu, so the user looks at those then.
+- The console re-parks in front of the new heading on sit / reseat, and slides clear when it would cover a label
+  in the room (strip, readout, tags, size tag, absorber tags, coach; `LAYOUT console yields to ...`).
+- Labels by a speaker stand `LABEL_GAP_M` (0.15 m) towards the viewer; the drag readout sits beside the speaker.
+- No hover tag while the menu or a dialog is up.
+- QA: debug `layout` logs every shown panel's angular box and `OVERLAP` / `OCCLUDED` / `OFFVIEW`;
+  `tools/ui_audit.sh` shoots 20 states + 4 interaction scenes at headings 0 / 90 / 180 (re-seated each time) into
+  `.scratch/audit/` (about 20 min; `STATES=... NOI=1 START=<current heading>` for a subset). The emulator shows only
+  about +-29 degrees across, so the console's right edge is cut in default shots; the `-look` shots turn to it.
+  Report: `../spatial-app-factory/apps/theater-planner/build/ui-audit.md`.
+- Unit tests: `app/src/test/.../domain/HeadFrameTest.kt`; `gradlew testDebugUnitTest`.
 
 ## Known gaps / notes for QA
 

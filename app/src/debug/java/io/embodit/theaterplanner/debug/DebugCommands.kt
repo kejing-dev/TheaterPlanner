@@ -44,7 +44,7 @@ import java.util.Locale
  * Room (taste profile D7): `rescan` · `ignore_scan` s=on|off (no planes at all) · `room` s=virtual|scan ·
  * `room_page` s=on|off · `room_size` a=w,l,h · `room_move` a=right,ahead,turnDeg · `room_recenter`
  *
- * Reading back: `state` (no s) · `dump` · `pose` · `panels` · `planes` · `bounds`
+ * Reading back: `state` (no s) · `dump` · `pose` · `panels` · `planes` · `bounds` · `layout` (who covers whom, taste profile D8)
  */
 internal object DebugCommands {
     private val main = Handler(Looper.getMainLooper())
@@ -121,6 +121,7 @@ internal object DebugCommands {
             }
             "hidemode" -> TpLog.i("CMD ${scene.debugHideMode(s ?: "auto")}")
             "pose" -> TpLog.i(scene.poseLine())
+            "layout" -> scene.layoutLines().forEach { TpLog.i(it) }
             "panels" -> scene.panelLines().forEach { TpLog.i(it) }
             "planes" -> scene.planeLines().forEach { TpLog.i(it) }
             "bounds" ->
