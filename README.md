@@ -40,7 +40,7 @@ APK 在 [Releases](https://github.com/kejing-dev/TheaterPlanner/releases) 页面
 
 ### 截图
 
-v0.1.3 高清截图（PICO Emulator 6.1 · High Definition，2560×1440）：
+v0.1.3 高清截图（PICO 模拟器 6.1 高清模式，简体中文界面，2560×1440）：
 
 | | |
 |---|---|
