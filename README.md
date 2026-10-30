@@ -4,6 +4,6 @@
 
 | 会话 | 标题 | 行数 |
 |---|---|---|
-| `17c1106e` | [theater-planner] design · 影院规划 | 947 |
 | `67145289` | [theater-planner] build · 影院规划 虚拟房间 | 1392 |
 | `d2fecd1d` | [theater-planner] 发布 v0.1.3 · GitHub + 飞书 + Vibe Lab 素材 | 990 |
+| `17c1106e` | [theater-planner] design · 影院规划 | 947 |
